@@ -759,16 +759,18 @@ function measureLabel(img, m) {
 }
 function drawMeasures(img) {
   const list = state.measures.get(img); if (!list) return;
-  ctx.lineWidth = 1.5; ctx.font = '12px ui-monospace,Consolas,monospace';
+  const color = getComputedStyle(document.documentElement).getPropertyValue('--measure').trim() || '#ffd84a';
+  ctx.font = '600 12px ui-monospace,Consolas,monospace'; ctx.textBaseline = 'middle';
   for (const m of list) {
     const a = toScreen(m.a), b = toScreen(m.b);
-    ctx.strokeStyle = getComputedStyle(document.documentElement).getPropertyValue('--measure');
+    ctx.lineWidth = 1.5; ctx.strokeStyle = color;
     ctx.beginPath(); ctx.moveTo(a.x, a.y); ctx.lineTo(b.x, b.y); ctx.stroke();
     for (const p of [a, b]) { ctx.beginPath(); ctx.arc(p.x, p.y, 3, 0, Math.PI * 2); ctx.stroke(); }
-    const t = measureLabel(img, m), tx = (a.x + b.x) / 2 + 8, ty = (a.y + b.y) / 2 - 8;
-    ctx.lineWidth = 3; ctx.strokeStyle = '#000'; ctx.strokeText(t, tx, ty);
-    ctx.fillStyle = ctx.strokeStyle = getComputedStyle(document.documentElement).getPropertyValue('--measure');
-    ctx.fillText(t, tx, ty); ctx.lineWidth = 1.5;
+    // etichetta: testo giallo su riquadro scuro, sopra il centro della linea
+    const t = measureLabel(img, m), w = ctx.measureText(t).width + 10;
+    const tx = (a.x + b.x) / 2 - w / 2, ty = (a.y + b.y) / 2 - 16;
+    ctx.fillStyle = 'rgba(0,0,0,.75)'; ctx.fillRect(tx, ty - 9, w, 18);
+    ctx.fillStyle = color; ctx.fillText(t, tx + 5, ty);
   }
 }
 
