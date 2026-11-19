@@ -2,98 +2,141 @@
 <html lang="it">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#171a1f">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
 <title>Visualizzatore DICOM</title>
 <script src="https://cdn.jsdelivr.net/npm/dicom-parser@1.8.21/dist/dicomParser.min.js"></script>
 <style>
 :root{--bg:#0e1013;--panel:#171a1f;--panel2:#1f242c;--line:#2b313b;--text:#e6e8eb;--muted:#98a2ae;--accent:#4aa3ff;--warn:#ffb454;--measure:#ffd84a}
-*{box-sizing:border-box}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
 html,body{height:100%;margin:0}
-body{background:var(--bg);color:var(--text);font:14px/1.4 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;display:flex;flex-direction:column;overflow:hidden}
-header{display:flex;flex-wrap:wrap;gap:6px;align-items:center;padding:8px 12px;background:var(--panel);border-bottom:1px solid var(--line)}
-header h1{font-size:15px;margin:0 10px 0 0;font-weight:600;white-space:nowrap}
-button,select,label.btn{background:var(--panel2);color:var(--text);border:1px solid var(--line);border-radius:6px;padding:5px 10px;font:inherit;cursor:pointer;white-space:nowrap}
+body{height:100dvh;background:var(--bg);color:var(--text);font:14px/1.4 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;display:flex;flex-direction:column;overflow:hidden;overscroll-behavior:none;
+  padding:env(safe-area-inset-top) env(safe-area-inset-right) 0 env(safe-area-inset-left)}
+header{display:flex;gap:6px;align-items:center;padding:8px 12px;background:var(--panel);border-bottom:1px solid var(--line)}
+header h1{font-size:15px;margin:0 10px 0 0;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+#toolbar{display:flex;flex-wrap:wrap;gap:6px;align-items:center;padding:6px 12px;background:var(--panel);border-bottom:1px solid var(--line)}
+button,select,label.btn{background:var(--panel2);color:var(--text);border:1px solid var(--line);border-radius:6px;padding:5px 10px;font:inherit;cursor:pointer;white-space:nowrap;display:inline-flex;align-items:center;gap:5px}
 button:hover:not(:disabled),label.btn:hover{border-color:var(--accent)}
 button.active{background:var(--accent);color:#06121f;border-color:var(--accent)}
 button:disabled,select:disabled{opacity:.4;cursor:default}
 label.btn input{display:none}
+label.btn.primary{border-color:var(--accent)}
+.ic{font-size:14px;line-height:1}
 .group{display:flex;gap:4px;align-items:center}
-.sep{width:1px;height:24px;background:var(--line);margin:0 4px}
 .spacer{flex:1}
+.mobileOnly{display:none}
 main{flex:1;display:flex;min-height:0}
 #seriesPanel{width:230px;background:var(--panel);border-right:1px solid var(--line);overflow:auto;flex-shrink:0}
-#seriesPanel h2,#tags h2{font-size:12px;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);margin:10px 12px 6px;font-weight:600}
+.panelHead{display:flex;align-items:center;justify-content:space-between;margin:10px 12px 6px}
+.panelHead h2{font-size:12px;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);margin:0;font-weight:600}
+.panelHead button{padding:2px 8px}
 .series{display:block;width:100%;text-align:left;border:0;border-bottom:1px solid var(--line);border-radius:0;background:none;padding:8px 12px}
 .series.active{background:var(--panel2);color:var(--text);border-color:var(--line);box-shadow:inset 3px 0 0 var(--accent)}
 .series .mod{display:inline-block;font-size:11px;font-weight:700;background:#2c3a4d;color:#bcd9ff;border-radius:4px;padding:0 5px;margin-right:6px}
 .series .sub{display:block;color:var(--muted);font-size:12px}
 .series .warn{color:var(--warn)}
 .emptyList{color:var(--muted);font-size:13px;padding:0 12px}
+#backdrop{display:none;position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:19}
 #center{flex:1;display:flex;flex-direction:column;min-width:0}
 #viewport{position:relative;flex:1;min-height:0;background:#000;overflow:hidden}
 #viewport.drop{outline:2px dashed var(--accent);outline-offset:-8px}
-canvas#view{position:absolute;inset:0;width:100%;height:100%;touch-action:none;cursor:crosshair}
+canvas#view{position:absolute;inset:0;width:100%;height:100%;touch-action:none;cursor:crosshair;-webkit-user-select:none;user-select:none}
 .ov{position:absolute;font:12px/1.35 ui-monospace,Consolas,monospace;color:#eaeaea;text-shadow:0 0 3px #000,0 0 2px #000,0 0 1px #000;pointer-events:none;white-space:pre}
 .tl{top:8px;left:10px}.tr{top:8px;right:10px;text-align:right}.bl{bottom:8px;left:10px}.br{bottom:8px;right:10px;text-align:right}
 #msg,#empty,#loading{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);text-align:center;max-width:min(460px,90%)}
 #msg{color:var(--warn);background:rgba(20,20,20,.85);padding:12px 16px;border-radius:8px;pointer-events:none}
-#empty{color:var(--muted);line-height:1.6}
+#empty{color:var(--muted);line-height:1.6;width:90%}
 #empty strong{color:var(--text);font-size:16px;display:block;margin-bottom:6px}
 #empty .privacy{font-size:12px;margin-top:10px}
 #loading{background:var(--panel);padding:12px 18px;border-radius:8px;border:1px solid var(--line)}
+#toast{position:absolute;left:50%;bottom:14px;transform:translateX(-50%);background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:8px 14px;font-size:13px;max-width:90%;text-align:center;z-index:5;pointer-events:none;box-shadow:0 4px 16px rgba(0,0,0,.5)}
+#toast.warn{color:var(--warn)}
 .bar{display:flex;gap:10px;align-items:center;padding:6px 12px;background:var(--panel);border-top:1px solid var(--line)}
-.bar input[type=range]{flex:1;accent-color:var(--accent)}
-#sliceLabel{font:12px ui-monospace,Consolas,monospace;min-width:72px;text-align:right}
-#status{color:var(--muted);font-size:12px;max-width:45%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.bar input[type=range]{flex:1;min-width:0;accent-color:var(--accent)}
+#playBtn{width:34px;justify-content:center;padding:4px 0}
+#sliceLabel{font:12px ui-monospace,Consolas,monospace;min-width:64px;text-align:right}
+#status{color:var(--muted);font-size:12px;max-width:40%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 #tags{width:360px;background:var(--panel);border-left:1px solid var(--line);display:flex;flex-direction:column;flex-shrink:0}
 #tags[hidden]{display:none}
 #tagFilter{margin:0 12px 8px;padding:6px 8px;background:var(--panel2);border:1px solid var(--line);border-radius:6px;color:var(--text);font:inherit}
 #tagFile{color:var(--muted);font-size:12px;margin:0 12px 6px;word-break:break-all}
-#tagWrap{overflow:auto;flex:1}
+#tagWrap{overflow:auto;flex:1;-webkit-overflow-scrolling:touch}
 #tagTable{border-collapse:collapse;width:100%;font-size:12px}
 #tagTable td{padding:3px 8px;border-bottom:1px solid var(--line);vertical-align:top}
 #tagTable td.t{font-family:ui-monospace,Consolas,monospace;color:var(--muted);white-space:nowrap}
 #tagTable td.v{word-break:break-word}
-dialog{background:var(--panel);color:var(--text);border:1px solid var(--line);border-radius:10px;max-width:520px}
+dialog{background:var(--panel);color:var(--text);border:1px solid var(--line);border-radius:10px;max-width:min(560px,calc(100% - 24px));max-height:85dvh;overflow:auto}
 dialog::backdrop{background:rgba(0,0,0,.6)}
 dialog h3{margin-top:0}
+dialog h4{margin:14px 0 4px;color:var(--muted);font-size:12px;text-transform:uppercase;letter-spacing:.06em}
 dialog table{border-collapse:collapse;font-size:13px}
 dialog td{padding:3px 10px 3px 0;vertical-align:top}
 dialog td:first-child{color:var(--accent);white-space:nowrap}
 @media (max-width:900px){
-  main{flex-direction:column}
-  #seriesPanel{width:auto;max-height:110px;border-right:0;border-bottom:1px solid var(--line)}
-  #tags{position:fixed;left:0;right:0;bottom:0;height:50vh;width:auto;z-index:5;border-left:0;border-top:1px solid var(--line)}
+  #tags{position:fixed;left:0;right:0;bottom:0;height:55dvh;width:auto;z-index:15;border-left:0;border-top:1px solid var(--line);border-radius:12px 12px 0 0;box-shadow:0 -8px 24px rgba(0,0,0,.5);padding-bottom:env(safe-area-inset-bottom)}
   #status{display:none}
+}
+/* ---------- Smartphone ---------- */
+@media (max-width:700px){
+  header{padding:6px 8px;gap:6px}
+  header h1{flex:1;min-width:0;font-size:14px;margin:0}
+  header .spacer,.long,#dirLabel{display:none}
+  .mobileOnly{display:inline-flex}
+  button,select,label.btn{padding:8px 10px;min-height:38px}
+  main{order:1}
+  #toolbar{order:2;flex-wrap:nowrap;overflow-x:auto;gap:2px;padding:4px 4px calc(4px + env(safe-area-inset-bottom));border-bottom:0;border-top:1px solid var(--line);scrollbar-width:none}
+  #toolbar::-webkit-scrollbar{display:none}
+  #toolbar .group{gap:2px}
+  #toolbar button{flex-direction:column;gap:2px;min-width:60px;padding:5px 4px;font-size:11px;border:0;background:none;color:var(--muted)}
+  #toolbar button .ic{font-size:20px}
+  #toolbar button.active{background:var(--panel2);color:var(--accent)}
+  #toolbar select{flex-shrink:0;max-width:150px;margin:0 4px;font-size:13px}
+  #seriesPanel{position:fixed;top:0;bottom:0;left:0;width:min(84vw,320px);z-index:20;border-right:1px solid var(--line);transform:translateX(-102%);padding-top:env(safe-area-inset-top)}
+  #seriesPanel.anim{transition:transform .2s ease}
+  #seriesPanel.open{transform:none;box-shadow:8px 0 24px rgba(0,0,0,.5)}
+  #backdrop.show{display:block}
+  .series{padding:12px 14px}
+  .ov{font-size:10px;line-height:1.3}
+  .tl{top:6px;left:8px}.tr{top:6px;right:8px}.bl{bottom:6px;left:8px}.br{bottom:6px;right:8px}
+  .bar{padding:6px 10px;gap:8px}
+  .bar input[type=range]{height:30px}
+  #playBtn{width:40px}
+  #sliceLabel{min-width:52px}
 }
 </style>
 </head>
 <body>
 <header>
-  <h1>Visualizzatore DICOM</h1>
-  <label class="btn" title="Apri una cartella con file DICOM">Apri cartella<input type="file" id="dirInput" webkitdirectory multiple></label>
-  <label class="btn" title="Apri uno o più file DICOM">Apri file<input type="file" id="fileInput" multiple></label>
+  <button id="seriesBtn" class="mobileOnly" title="Serie" aria-label="Serie"><span class="ic">☰</span></button>
+  <h1><span class="long">Visualizzatore </span>DICOM</h1>
+  <label class="btn" id="dirLabel" title="Apri una cartella con file DICOM"><span class="long">Apri </span>cartella<input type="file" id="dirInput" webkitdirectory multiple></label>
+  <label class="btn primary" title="Apri file DICOM o un archivio .zip">Apri<span class="long"> file</span><input type="file" id="fileInput" multiple></label>
   <button id="demoBtn" title="Genera una TC sintetica di prova">Demo</button>
-  <span class="sep"></span>
+  <span class="spacer"></span>
+  <button id="tagsBtn" title="Mostra/nascondi i tag DICOM (T)">Tag<span class="long"> DICOM</span></button>
+  <button id="helpBtn" title="Comandi" aria-label="Aiuto">?</button>
+</header>
+<nav id="toolbar">
   <div class="group" id="tools">
-    <button data-tool="window" class="active" title="Trascina: orizzontale = larghezza, verticale = centro (W)">Finestra</button>
-    <button data-tool="pan" title="Sposta l'immagine (P)">Sposta</button>
-    <button data-tool="zoom" title="Trascina su/giù per lo zoom (Z)">Zoom</button>
-    <button data-tool="measure" title="Misura una distanza in mm (M)">Misura</button>
+    <button data-tool="scroll" title="Trascina su/giù per scorrere le immagini (S)"><span class="ic">↕</span><span>Scorri</span></button>
+    <button data-tool="window" title="Trascina: orizzontale = larghezza, verticale = centro (W)"><span class="ic">◐</span><span>Finestra</span></button>
+    <button data-tool="pan" title="Sposta l'immagine (P)"><span class="ic">✥</span><span>Sposta</span></button>
+    <button data-tool="zoom" title="Trascina su/giù per lo zoom (Z)"><span class="ic">⊕</span><span>Zoom</span></button>
+    <button data-tool="measure" title="Misura una distanza in mm (M)"><span class="ic">⟷</span><span>Misura</span></button>
   </div>
   <select id="preset" title="Preset di finestra" disabled></select>
-  <button id="invertBtn" title="Inverti i livelli di grigio (I)" disabled>Inverti</button>
-  <button id="resetBtn" title="Ripristina finestra, zoom e misure (R)" disabled>Reset</button>
-  <button id="exportBtn" title="Salva la vista attuale come PNG" disabled>Salva PNG</button>
-  <span class="spacer"></span>
-  <button id="tagsBtn" title="Mostra/nascondi i tag DICOM (T)">Tag DICOM</button>
-  <button id="helpBtn" title="Comandi">?</button>
-</header>
+  <button id="invertBtn" title="Inverti i livelli di grigio (I)" disabled><span class="ic">◑</span><span>Inverti</span></button>
+  <button id="resetBtn" title="Ripristina finestra, zoom e misure (R)" disabled><span class="ic">↺</span><span>Reset</span></button>
+  <button id="exportBtn" title="Salva la vista attuale come PNG" disabled><span class="ic">⤓</span><span>Salva PNG</span></button>
+</nav>
 <main>
   <aside id="seriesPanel">
-    <h2>Serie</h2>
+    <div class="panelHead"><h2>Serie</h2><button id="seriesClose" class="mobileOnly" aria-label="Chiudi">✕</button></div>
     <div id="seriesList"><p class="emptyList">Nessuna serie caricata.</p></div>
   </aside>
+  <div id="backdrop"></div>
   <section id="center">
     <div id="viewport">
       <canvas id="view"></canvas>
@@ -103,21 +146,23 @@ dialog td:first-child{color:var(--accent);white-space:nowrap}
       <div class="ov br" id="ovBR"></div>
       <div id="msg" hidden></div>
       <div id="loading" hidden></div>
+      <div id="toast" hidden></div>
       <div id="empty">
-        <strong>Trascina qui una cartella o dei file DICOM</strong>
-        oppure usa «Apri cartella» / «Apri file».<br>
+        <strong>Apri un esame DICOM</strong>
+        Usa «Apri file» (anche un archivio .zip) o «Apri cartella», oppure trascina qui i file.<br>
         Non hai file a portata di mano? Premi «Demo».
         <div class="privacy">I file vengono letti solo in locale nel browser: nessun dato viene inviato in rete.</div>
       </div>
     </div>
     <div class="bar">
+      <button id="playBtn" title="Riproduci la serie (spazio)" aria-label="Riproduci" disabled>▶</button>
       <input type="range" id="slider" min="0" max="0" value="0" disabled aria-label="Immagine">
       <span id="sliceLabel">– / –</span>
       <span id="status"></span>
     </div>
   </section>
   <aside id="tags" hidden>
-    <h2>Tag DICOM</h2>
+    <div class="panelHead"><h2>Tag DICOM</h2><button id="tagsClose" aria-label="Chiudi">✕</button></div>
     <div id="tagFile"></div>
     <input id="tagFilter" type="search" placeholder="Filtra (nome, tag o valore)…">
     <div id="tagWrap"><table id="tagTable"><tbody></tbody></table></div>
@@ -126,20 +171,30 @@ dialog td:first-child{color:var(--accent);white-space:nowrap}
 
 <dialog id="help">
   <h3>Comandi</h3>
+  <h4>Touch (telefono e tablet)</h4>
+  <table>
+    <tr><td>Un dito</td><td>Strumento attivo: Scorri, Finestra, Sposta, Zoom, Misura</td></tr>
+    <tr><td>Due dita</td><td>Allarga/stringi per lo zoom, trascina per spostare</td></tr>
+    <tr><td>Doppio tocco</td><td>Adatta l'immagine allo schermo</td></tr>
+    <tr><td>☰</td><td>Elenco delle serie dell'esame</td></tr>
+    <tr><td>▶</td><td>Riproduce la serie o il filmato</td></tr>
+  </table>
+  <h4>Mouse e tastiera</h4>
   <table>
     <tr><td>Rotellina</td><td>Scorri le immagini della serie</td></tr>
     <tr><td>Ctrl + rotellina</td><td>Zoom nel punto del mouse</td></tr>
-    <tr><td>Tasto sinistro</td><td>Strumento attivo (Finestra, Sposta, Zoom, Misura)</td></tr>
+    <tr><td>Tasto sinistro</td><td>Strumento attivo</td></tr>
     <tr><td>Tasto destro</td><td>Sposta l'immagine</td></tr>
     <tr><td>Tasto centrale</td><td>Zoom</td></tr>
     <tr><td>Doppio clic</td><td>Adatta l'immagine alla finestra</td></tr>
     <tr><td>↑ ↓ / PagSu PagGiù</td><td>Immagine precedente/successiva (±1 / ±10)</td></tr>
     <tr><td>Home / Fine</td><td>Prima / ultima immagine</td></tr>
-    <tr><td>W P Z M</td><td>Strumenti Finestra, Sposta, Zoom, Misura</td></tr>
+    <tr><td>S W P Z M</td><td>Strumenti Scorri, Finestra, Sposta, Zoom, Misura</td></tr>
+    <tr><td>Spazio</td><td>Riproduci / ferma</td></tr>
     <tr><td>I / R / F / T</td><td>Inverti, Reset, Adatta, Tag DICOM</td></tr>
     <tr><td>Canc</td><td>Cancella le misure dell'immagine corrente</td></tr>
   </table>
-  <p style="color:var(--muted);font-size:12px">Formati supportati: DICOM non compressi (Little/Big Endian) e compressi JPEG Baseline 8 bit, JPEG Lossless, JPEG-LS, JPEG 2000 e RLE; monocromatici e a colori, anche multi-frame. Non supportati: JPEG Extended a 12 bit e Deflate. I decodificatori vengono scaricati solo la prima volta che servono.<br>Strumento didattico: non usarlo per diagnosi.</p>
+  <p style="color:var(--muted);font-size:12px">Si possono aprire file DICOM singoli, cartelle intere o archivi .zip. Formati supportati: DICOM non compressi (Little/Big Endian) e compressi JPEG Baseline 8 bit, JPEG Lossless, JPEG-LS, JPEG 2000 e RLE; monocromatici e a colori, anche multi-frame. Non supportati: JPEG Extended a 12 bit, Deflate, video MPEG/H.264. I decodificatori vengono scaricati solo la prima volta che servono.<br>Strumento didattico: non usarlo per diagnosi.</p>
   <form method="dialog"><button>Chiudi</button></form>
 </dialog>
 
@@ -264,7 +319,15 @@ const viewport = $('#viewport');
 // ============================================================
 //  Lettura dei file
 // ============================================================
+// File che sicuramente non sono DICOM (es. il programma di visualizzazione dei CD)
+const SKIP_RE = /(^|\/)(\.|__MACOSX\/)|\.(exe|dll|msi|cab|bat|cmd|sh|jar|class|js|css|html?|xml|txt|pdf|ini|inf|ico|png|jpe?g|gif|bmp|chm|hlp|ocx|sys|lnk|url|plist|dylib|so|dmg|db|json|zip)$/i;
+
 async function parseFile(file) {
+  // Controllo veloce sui primi byte, senza leggere file grandi che non sono DICOM
+  const head = new Uint8Array(await file.slice(0, 132).arrayBuffer());
+  const dicm = head.length >= 132 && head[128] === 68 && head[129] === 73 && head[130] === 67 && head[131] === 77;
+  const group = head[0] | head[1] << 8;
+  if (!dicm && group !== 0x0008 && group !== 0x0002) return { error: true };
   const bytes = new Uint8Array(await file.arrayBuffer());
   let ds;
   try {
@@ -315,14 +378,66 @@ function buildImages(ds, bytes, file) {
   return out;
 }
 
+// ------------------------------------------------------------
+//  Archivi ZIP: letti a pezzi, senza caricare tutto in memoria
+// ------------------------------------------------------------
+async function isZip(file) {
+  const h = new Uint8Array(await file.slice(0, 4).arrayBuffer());
+  return h[0] === 0x50 && h[1] === 0x4b && h[2] === 3 && h[3] === 4;
+}
+async function unzip(file, onProgress) {
+  const size = file.size, tailLen = Math.min(size, 65557);
+  const tail = new DataView(await file.slice(size - tailLen).arrayBuffer());
+  let e = -1;
+  for (let i = tailLen - 22; i >= 0; i--) if (tail.getUint32(i, true) === 0x06054b50) { e = i; break; }
+  if (e < 0) throw new Error('archivio ZIP non valido');
+  const count = tail.getUint16(e + 10, true), cdSize = tail.getUint32(e + 12, true), cdOff = tail.getUint32(e + 16, true);
+  if (cdOff === 0xffffffff || count === 0xffff) throw new Error('archivio ZIP64 (oltre 4 GB) non supportato: estrailo e apri la cartella');
+  const cd = new DataView(await file.slice(cdOff, cdOff + cdSize).arrayBuffer());
+  const dec = new TextDecoder(), out = [];
+  let p = 0, skipped = 0;
+  for (let k = 0; k < count && p + 46 <= cd.byteLength; k++) {
+    if (cd.getUint32(p, true) !== 0x02014b50) break;
+    const flags = cd.getUint16(p + 8, true), method = cd.getUint16(p + 10, true), csize = cd.getUint32(p + 20, true);
+    const nlen = cd.getUint16(p + 28, true), xlen = cd.getUint16(p + 30, true), clen = cd.getUint16(p + 32, true);
+    const lho = cd.getUint32(p + 42, true);
+    const name = dec.decode(new Uint8Array(cd.buffer, p + 46, nlen));
+    p += 46 + nlen + xlen + clen;
+    if (name.endsWith('/') || SKIP_RE.test(name)) continue;
+    if (flags & 1 || (method !== 0 && method !== 8)) { skipped++; continue; }   // cifrato o compressione insolita
+    const lh = new DataView(await file.slice(lho, lho + 30).arrayBuffer());
+    const start = lho + 30 + lh.getUint16(26, true) + lh.getUint16(28, true);
+    let blob = file.slice(start, start + csize);
+    if (method === 8) {
+      if (typeof DecompressionStream === 'undefined') throw new Error('questo browser non sa aprire gli ZIP: aggiornalo');
+      blob = await new Response(blob.stream().pipeThrough(new DecompressionStream('deflate-raw'))).blob();
+    }
+    const f = new File([blob], name.split('/').pop()); f.zipPath = name;
+    out.push(f);
+    if (k % 20 === 0 && onProgress) { onProgress(k, count); await new Promise(r => setTimeout(r)); }
+  }
+  if (skipped) setStatus(`${skipped} file dello ZIP non leggibili (protetti da password?)`, true);
+  return out;
+}
+
 async function loadFiles(fileList) {
-  const files = Array.from(fileList || []);
+  let files = Array.from(fileList || []);
   if (!files.length) return;
   if (typeof dicomParser === 'undefined') {
     setStatus('Libreria dicom-parser non caricata: serve una connessione internet la prima volta.', true);
     return;
   }
+  togglePlay(false); openSeriesPanel(false);
   const loading = $('#loading'); loading.hidden = false; $('#empty').hidden = true;
+  // Espande gli archivi ZIP e scarta i file che non possono essere DICOM
+  const expanded = [];
+  for (const f of files) {
+    if (await isZip(f)) {
+      try { expanded.push(...await unzip(f, (k, n) => loading.textContent = `Estrazione ZIP ${k} / ${n}…`)); }
+      catch (e) { setStatus(`${f.name}: ${e.message}`, true); }
+    } else if (!SKIP_RE.test(f.webkitRelativePath || f.name)) expanded.push(f);
+  }
+  files = expanded;
   const bySeries = new Map();
   let skipped = 0, images = 0;
   for (let i = 0; i < files.length; i++) {
@@ -348,7 +463,7 @@ async function loadFiles(fileList) {
   state.series = [...bySeries.values()];
   state.series.forEach(sortSeries);
   state.series.sort((a, b) => (parseInt(a.info.seriesNumber) || 0) - (parseInt(b.info.seriesNumber) || 0));
-  state.measures.clear();
+  state.measures.clear(); decodedQueue.length = 0;
   renderSeriesList();
   selectSeries(0);
   setStatus(`${images} immagini in ${state.series.length} serie` + (skipped ? ` · ${skipped} file ignorati` : ''));
@@ -495,12 +610,27 @@ async function decodeImage(img) {
 function prepare(img) {
   if (img.raw || img.error) return Promise.resolve(img.raw);
   if (!img.decoding) img.decoding = decodeImage(img)
-    .then(a => (img.raw = a))
+    .then(a => { img.raw = a; if (img.kind !== 'raw') rememberDecoded(img); return a; })
     .catch(e => { img.error = e.message || String(e); })
     .finally(() => { img.decoding = null; });
   return img.decoding;
 }
 function getRaw(img) { if (!img.raw) throw new Error('Immagine non ancora decodificata'); return img.raw; }
+
+// Le immagini compresse decodificate occupano memoria: oltre un certo numero si liberano
+// le più vecchie lontane da quella visualizzata (verranno ridecodificate se servono).
+// I non compressi non pesano: i loro pixel sono letti direttamente dal file.
+const MAX_DECODED = matchMedia('(pointer: coarse)').matches || (navigator.deviceMemory || 8) <= 4 ? 120 : 600;
+const decodedQueue = [];
+function rememberDecoded(img) {
+  decodedQueue.push(img);
+  if (decodedQueue.length <= MAX_DECODED) return;
+  const near = new Set(state.cur ? state.cur.images.slice(Math.max(0, state.idx - 8), state.idx + 9) : []);
+  for (let i = 0; i < decodedQueue.length && decodedQueue.length > MAX_DECODED; i++) {
+    const m = decodedQueue[i];
+    if (!near.has(m)) { m.raw = null; decodedQueue.splice(i--, 1); }
+  }
+}
 
 // Pre-decodifica le fette vicine per uno scorrimento fluido
 let prefetchTimer = null;
@@ -646,15 +776,18 @@ function updateOverlays(img) {
   const tl = $('#ovTL'), tr = $('#ovTR'), bl = $('#ovBL'), br = $('#ovBR');
   if (!img) { tl.textContent = tr.textContent = bl.textContent = br.textContent = ''; return; }
   const I = img.info, s = state.cur, N = s.images.length;
-  tl.textContent = [I.patient || '(senza nome)', I.patientId, I.studyDate, I.studyDesc].filter(Boolean).join('\n');
-  tr.textContent = [`${I.modality}  Serie ${I.seriesNumber || '-'}`, I.seriesDesc,
-    `Img ${state.idx + 1} / ${N}` + (I.frames > 1 ? `  (frame ${img.frame + 1})` : ''),
-    I.ipp && I.ipp.length === 3 ? `Pos ${I.ipp.map(v => v.toFixed(1)).join(', ')}` : ''].filter(Boolean).join('\n');
+  const compact = viewSize().w < 520;                 // smartphone: solo le informazioni essenziali
+  const cut = t => compact && t && t.length > 22 ? t.slice(0, 21) + '…' : t;
+  tl.textContent = (compact ? [cut(I.patient || '(senza nome)'), I.studyDate]
+    : [I.patient || '(senza nome)', I.patientId, I.studyDate, I.studyDesc]).filter(Boolean).join('\n');
+  tr.textContent = [`${I.modality}  Serie ${I.seriesNumber || '-'}`, cut(I.seriesDesc),
+    `Img ${state.idx + 1} / ${N}` + (I.frames > 1 && !compact ? `  (frame ${img.frame + 1})` : ''),
+    !compact && I.ipp && I.ipp.length === 3 ? `Pos ${I.ipp.map(v => v.toFixed(1)).join(', ')}` : ''].filter(Boolean).join('\n');
   const lines = [];
   if (!img.error) {
     if (!isColor(img)) lines.push(`L: ${fmtNum(state.wc)}  W: ${fmtNum(state.ww)}`);
     lines.push(`Zoom ${Math.round(state.view.scale * 100 * aspect(img).sx)}%`);
-    lines.push(`${I.cols}×${I.rows}` + (I.spacing ? `  ${I.spacing[1]}×${I.spacing[0]} mm` : '') + (I.thickness ? `  sp. ${I.thickness} mm` : ''));
+    if (!compact) lines.push(`${I.cols}×${I.rows}` + (I.spacing ? `  ${I.spacing[1]}×${I.spacing[0]} mm` : '') + (I.thickness ? `  sp. ${I.thickness} mm` : ''));
   }
   bl.textContent = lines.join('\n');
   let cur = '';
@@ -687,7 +820,7 @@ function renderSeriesList() {
     b.innerHTML = `<span class="mod">${esc(s.info.modality)}</span>${esc(s.info.seriesDesc || 'Serie ' + (s.info.seriesNumber || i + 1))}` +
       `<span class="sub">${s.images.length} immagini${s.info.studyDate ? ' · ' + esc(s.info.studyDate) : ''}</span>` +
       (err ? `<span class="sub warn">formato non supportato</span>` : '');
-    b.onclick = () => selectSeries(i);
+    b.onclick = () => { selectSeries(i); openSeriesPanel(false); };
     box.appendChild(b);
   });
 }
@@ -696,8 +829,11 @@ function selectSeries(i) {
   state.cur = state.series[i];
   document.querySelectorAll('.series').forEach((b, k) => b.classList.toggle('active', k === i));
   const N = state.cur.images.length;
-  state.idx = Math.floor((N - 1) / 2);
+  const film = state.cur.images.every(m => m.file === state.cur.images[0].file);   // filmato multi-frame
+  state.idx = film ? 0 : Math.floor((N - 1) / 2);
   const slider = $('#slider'); slider.max = N - 1; slider.value = state.idx; slider.disabled = N < 2;
+  togglePlay(false); $('#playBtn').disabled = N < 2;
+  $('#seriesBtn').innerHTML = '<span class="ic">☰</span>' + (state.series.length > 1 ? `<span>${state.series.length}</span>` : '');
   $('#empty').hidden = true;
   ['#invertBtn', '#resetBtn', '#exportBtn'].forEach(s => $(s).disabled = false);
   state.invert = false; $('#invertBtn').classList.remove('active');
@@ -782,7 +918,7 @@ function renderTags(force) {
   const key = img.ds + '|' + q;
   if (!force && tagsShownFor && tagsShownFor.ds === img.ds && tagsShownFor.q === q) return;
   tagsShownFor = { ds: img.ds, q };
-  $('#tagFile').textContent = img.file.webkitRelativePath || img.file.name;
+  $('#tagFile').textContent = img.file.zipPath || img.file.webkitRelativePath || img.file.name;
   const ds = img.ds, rows = [];
   for (const tag of Object.keys(ds.elements).sort()) {
     const el = ds.elements[tag];
@@ -799,21 +935,43 @@ function renderTags(force) {
 // ============================================================
 //  Eventi
 // ============================================================
-let drag = null;
+// Puntatori attivi (mouse, penna o dita): servono per riconoscere i gesti a due dita
+const pointers = new Map();
+let drag = null, pinch = null, gestureLock = false, lastTap = null;
+function pos(e) { const r = canvas.getBoundingClientRect(); return { x: e.clientX - r.left, y: e.clientY - r.top }; }
+
 canvas.addEventListener('contextmenu', e => e.preventDefault());
 canvas.addEventListener('pointerdown', e => {
   const img = curImg(); if (!img || img.error) return;
-  canvas.setPointerCapture(e.pointerId);
-  const tool = e.button === 2 ? 'pan' : e.button === 1 ? 'zoom' : state.tool;
-  drag = { tool, x: e.offsetX, y: e.offsetY, wc: state.wc, ww: state.ww, vx: state.view.x, vy: state.view.y, scale: state.view.scale };
-  if (tool === 'measure') { const p = toImage(e.offsetX, e.offsetY); drag.m = { a: p, b: p }; measuresFor(img).push(drag.m); }
+  try { canvas.setPointerCapture(e.pointerId); } catch { /* puntatore già rilasciato */ }
+  const p = pos(e); pointers.set(e.pointerId, p);
   e.preventDefault();
+  if (pointers.size === 2) { cancelDrag(); startPinch(); return; }   // secondo dito: zoom/spostamento
+  if (pointers.size > 2 || gestureLock) return;
+  const tool = e.button === 2 ? 'pan' : e.button === 1 ? 'zoom' : state.tool;
+  drag = { tool, x: p.x, y: p.y, wc: state.wc, ww: state.ww, idx: state.idx, vx: state.view.x, vy: state.view.y,
+           scale: state.view.scale, moved: false, t: performance.now() };
+  if (tool === 'measure') { const q = toImage(p.x, p.y); drag.m = { a: q, b: q }; measuresFor(img).push(drag.m); }
 });
 canvas.addEventListener('pointermove', e => {
-  state.cursor = { x: e.offsetX, y: e.offsetY };
+  const p = pos(e);
+  if (pointers.has(e.pointerId)) pointers.set(e.pointerId, p);
+  if (e.pointerType === 'mouse') state.cursor = p;
+  if (pinch && pointers.size >= 2) {
+    const [a, b] = [...pointers.values()];
+    const d = Math.hypot(a.x - b.x, a.y - b.y) || 1, m = { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 };
+    const ns = clamp(pinch.v0.scale * d / pinch.d0, 0.05, 50), f = ns / pinch.v0.scale;
+    state.view = { scale: ns, x: m.x - (pinch.m0.x - pinch.v0.x) * f, y: m.y - (pinch.m0.y - pinch.v0.y) * f };
+    state.autoFit = false; scheduleDraw(); return;
+  }
   if (drag) {
-    const dx = e.offsetX - drag.x, dy = e.offsetY - drag.y;
+    const dx = p.x - drag.x, dy = p.y - drag.y;
+    if (Math.hypot(dx, dy) > 6) drag.moved = true;
     switch (drag.tool) {
+      case 'scroll': {
+        const N = state.cur.images.length, step = clamp(viewSize().h / Math.max(N, 1), 4, 24);
+        setSlice(drag.idx + Math.round(dy / step)); break;
+      }
       case 'window':
         if (isColor(curImg())) break;
         state.ww = Math.max(1, drag.ww + dx * state.sens);
@@ -826,11 +984,23 @@ canvas.addEventListener('pointermove', e => {
         state.view = { scale: ns, x: drag.x - (drag.x - drag.vx) * f, y: drag.y - (drag.y - drag.vy) * f };
         state.autoFit = false; break;
       }
-      case 'measure': drag.m.b = toImage(e.offsetX, e.offsetY); break;
+      case 'measure': drag.m.b = toImage(p.x, p.y); break;
     }
   }
   scheduleDraw();
 });
+function startPinch() {
+  const [a, b] = [...pointers.values()];
+  pinch = { d0: Math.hypot(a.x - b.x, a.y - b.y) || 1, m0: { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 }, v0: { ...state.view } };
+  gestureLock = true;                      // nessun nuovo trascinamento finché non si alzano tutte le dita
+}
+function cancelDrag() {                    // annulla l'effetto del primo dito quando arriva il secondo
+  if (!drag) return;
+  if (drag.m) { const l = measuresFor(curImg()); const i = l.indexOf(drag.m); if (i >= 0) l.splice(i, 1); }
+  if (drag.tool === 'window') { state.wc = drag.wc; state.ww = drag.ww; state.dirty = true; }
+  if (drag.tool === 'scroll') setSlice(drag.idx);
+  drag = null;
+}
 function endDrag() {
   if (drag && drag.m) {
     const a = toScreen(drag.m.a), b = toScreen(drag.m.b);
@@ -838,10 +1008,26 @@ function endDrag() {
   }
   drag = null; scheduleDraw();
 }
-canvas.addEventListener('pointerup', endDrag);
-canvas.addEventListener('pointercancel', endDrag);
-canvas.addEventListener('pointerleave', () => { state.cursor = null; scheduleDraw(); });
+function pointerUp(e) {
+  pointers.delete(e.pointerId);
+  if (pinch && pointers.size < 2) pinch = null;
+  if (drag) {
+    const tap = !drag.moved && performance.now() - drag.t < 300 && e.type === 'pointerup';
+    endDrag();
+    if (tap && e.pointerType !== 'mouse') {          // doppio tocco = adatta allo schermo
+      const now = performance.now(), p = pos(e);
+      if (lastTap && now - lastTap.t < 350 && Math.hypot(p.x - lastTap.x, p.y - lastTap.y) < 30) { fitView(); scheduleDraw(); lastTap = null; }
+      else lastTap = { t: now, x: p.x, y: p.y };
+    }
+  }
+  if (!pointers.size) gestureLock = false;
+}
+canvas.addEventListener('pointerup', pointerUp);
+canvas.addEventListener('pointercancel', pointerUp);
+canvas.addEventListener('pointerleave', e => { if (e.pointerType === 'mouse') { state.cursor = null; scheduleDraw(); } });
 canvas.addEventListener('dblclick', () => { fitView(); scheduleDraw(); });
+// Safari iOS: evita lo zoom dell'intera pagina con due dita
+['gesturestart', 'gesturechange'].forEach(t => document.addEventListener(t, e => e.preventDefault()));
 
 let wheelAcc = 0;
 canvas.addEventListener('wheel', e => {
@@ -853,19 +1039,30 @@ canvas.addEventListener('wheel', e => {
   if (Math.abs(wheelAcc) >= 50) { setSlice(state.idx + Math.sign(wheelAcc)); wheelAcc = 0; }
 }, { passive: false });
 
-$('#slider').addEventListener('input', e => setSlice(+e.target.value));
+$('#slider').addEventListener('input', e => { togglePlay(false); setSlice(+e.target.value); });
 $('#preset').addEventListener('change', e => applyPreset(e.target.value));
 $('#tools').addEventListener('click', e => { const t = e.target.closest('button'); if (t) setTool(t.dataset.tool); });
 $('#invertBtn').onclick = toggleInvert;
 $('#resetBtn').onclick = resetAll;
 $('#exportBtn').onclick = exportPng;
 $('#tagsBtn').onclick = toggleTags;
+$('#tagsClose').onclick = toggleTags;
 $('#helpBtn').onclick = () => $('#help').showModal();
 $('#demoBtn').onclick = () => loadFiles(makeDemoFiles());
 $('#fileInput').onchange = e => { loadFiles(e.target.files); e.target.value = ''; };
 $('#dirInput').onchange = e => { loadFiles(e.target.files); e.target.value = ''; };
 $('#tagFilter').addEventListener('input', () => renderTags(true));
+$('#playBtn').onclick = () => togglePlay();
+$('#seriesBtn').onclick = () => openSeriesPanel(true);
+$('#seriesClose').onclick = $('#backdrop').onclick = () => openSeriesPanel(false);
 
+function openSeriesPanel(open) {
+  const p = $('#seriesPanel');
+  if (p.classList.contains('open') === open) return;
+  p.classList.add('anim'); setTimeout(() => p.classList.remove('anim'), 250);   // animazione solo all'apertura/chiusura
+  p.classList.toggle('open', open);
+  $('#backdrop').classList.toggle('show', open);
+}
 function toggleInvert() { if (!state.cur) return; state.invert = !state.invert; $('#invertBtn').classList.toggle('active', state.invert); state.dirty = true; scheduleDraw(); }
 function resetAll() {
   if (!state.cur) return;
@@ -886,6 +1083,24 @@ function exportPng() {
   });
 }
 
+// Riproduzione automatica (serie o filmati multi-frame, rispettando il Frame Time)
+let playing = false, playTimer = null;
+function togglePlay(force) {
+  playing = force === undefined ? !playing : force;
+  if (playing && (!state.cur || state.cur.images.length < 2)) playing = false;
+  const b = $('#playBtn'); b.textContent = playing ? '❚❚' : '▶'; b.classList.toggle('active', playing);
+  clearTimeout(playTimer); if (playing) playStep();
+}
+async function playStep() {
+  if (!playing || !state.cur) return;
+  const t0 = performance.now(), N = state.cur.images.length, next = (state.idx + 1) % N;
+  await prepare(state.cur.images[next]);
+  if (!playing) return;
+  setSlice(next);
+  const img = curImg(), ft = img.info.frames > 1 ? num(img.ds, 'x00181063', null) : null;
+  playTimer = setTimeout(playStep, Math.max(0, (ft ? clamp(ft, 15, 500) : 100) - (performance.now() - t0)));
+}
+
 document.addEventListener('keydown', e => {
   if (e.target.matches('input,select,textarea') || $('#help').open) return;
   const k = e.key;
@@ -893,14 +1108,18 @@ document.addEventListener('keydown', e => {
     ArrowUp: () => setSlice(state.idx - 1), ArrowLeft: () => setSlice(state.idx - 1),
     ArrowDown: () => setSlice(state.idx + 1), ArrowRight: () => setSlice(state.idx + 1),
     PageUp: () => setSlice(state.idx - 10), PageDown: () => setSlice(state.idx + 10),
-    Home: () => setSlice(0), End: () => setSlice(Infinity),
-    w: () => setTool('window'), p: () => setTool('pan'), z: () => setTool('zoom'), m: () => setTool('measure'),
+    Home: () => setSlice(0), End: () => setSlice(Infinity), ' ': () => togglePlay(),
+    s: () => setTool('scroll'), w: () => setTool('window'), p: () => setTool('pan'), z: () => setTool('zoom'), m: () => setTool('measure'),
     i: toggleInvert, r: resetAll, t: toggleTags, f: () => { fitView(); scheduleDraw(); },
     Delete: () => { if (curImg()) { state.measures.delete(curImg()); scheduleDraw(); } },
   };
   const fn = actions[k] || actions[k.toLowerCase()];
   if (fn && !e.ctrlKey && !e.metaKey && !e.altKey) { fn(); e.preventDefault(); }
 });
+
+// Strumento iniziale: "Scorri" sui dispositivi touch, "Finestra" con il mouse
+const isTouchUI = matchMedia('(pointer: coarse)').matches;
+setTool(isTouchUI ? 'scroll' : 'window');
 
 // Trascina e rilascia (anche cartelle intere)
 ['dragenter', 'dragover'].forEach(t => viewport.addEventListener(t, e => { e.preventDefault(); viewport.classList.add('drop'); }));
@@ -923,7 +1142,15 @@ viewport.addEventListener('drop', async e => {
 
 new ResizeObserver(() => { if (state.autoFit) fitView(); scheduleDraw(); }).observe(viewport);
 
-function setStatus(t, warn) { const s = $('#status'); s.textContent = t; s.style.color = warn ? 'var(--warn)' : ''; s.title = t; }
+let toastTimer = null;
+function setStatus(t, warn) {
+  const s = $('#status'); s.textContent = t; s.style.color = warn ? 'var(--warn)' : ''; s.title = t;
+  // Su schermi stretti la barra di stato è nascosta: mostra un avviso temporaneo
+  if (warn || matchMedia('(max-width:900px)').matches) {
+    const el = $('#toast'); el.textContent = t; el.classList.toggle('warn', !!warn); el.hidden = false;
+    clearTimeout(toastTimer); toastTimer = setTimeout(() => el.hidden = true, warn ? 6000 : 3000);
+  }
+}
 
 // ============================================================
 //  Demo: genera una TC sintetica come veri file DICOM

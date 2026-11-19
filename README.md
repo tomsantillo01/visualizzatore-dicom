@@ -18,12 +18,23 @@ In entrambi i casi serve internet per scaricare le librerie: `dicom-parser`, pi�
 Non caricare mai nel repository file di esami reali. Il `.gitignore` esclude già i file `.dcm` e `DICOMDIR`.
 
 ## Uso
-- **Apri cartella** / **Apri file**, oppure trascina una cartella sull'area nera.
+- **Apri file**: puoi scegliere uno o più file DICOM oppure un archivio **.zip**. Con **Apri cartella** apri una cartella intera, oppure puoi trascinarla sull'area nera.
+  Il programma salta da solo i file che non sono immagini, per esempio il visualizzatore incluso nei CD.
 - **Demo**: genera una TC sintetica di 60 fette per fare prove senza dati reali.
-- Rotellina: scorri le fette · Ctrl+rotellina: zoom · tasto destro: sposta · doppio clic: adatta.
-- Strumenti: Finestra (trascina per cambiare livello/larghezza), Sposta, Zoom, Misura (distanza in mm).
+- Strumenti: Scorri, Finestra (trascina per cambiare livello/larghezza), Sposta, Zoom, Misura (distanza in mm).
+- **▶**: riproduce la serie o il filmato (multi-frame, rispettando il Frame Time).
 - Preset di finestra per la TC (cervello, tessuti molli, addome, polmone, osso), Inverti, Salva PNG.
 - **Tag DICOM**: mostra tutti i tag del file corrente, con un filtro di ricerca.
+
+### Da computer
+Rotellina: scorri le fette · Ctrl+rotellina: zoom · tasto destro: sposta · doppio clic: adatta.
+
+### Da smartphone e tablet
+- Gli strumenti sono nella barra in basso. Lo strumento predefinito è **Scorri**: trascina un dito su e giù per cambiare immagine.
+- Due dita: allarga/stringi per lo zoom, trascina per spostare. Doppio tocco: adatta allo schermo.
+- **☰** apre l'elenco delle serie. Il pannello dei tag sale dal basso.
+- Sui telefoni di solito non si possono scegliere cartelle: usa **Apri** con i singoli file o con lo **.zip** dell'esame.
+- Per non esaurire la memoria del telefono, le immagini compresse lontane da quella visualizzata vengono liberate e ridecodificate quando servono.
 
 ## Cosa supporta
 - DICOM non compressi: Implicit/Explicit VR Little Endian, Explicit Big Endian.
