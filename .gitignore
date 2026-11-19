@@ -1,0 +1,9 @@
+# File di sistema di Windows/OneDrive
+desktop.ini
+Thumbs.db
+
+# Mai pubblicare immagini di esami: contengono dati personali
+*.dcm
+*.DCM
+DICOMDIR
+*.dicom

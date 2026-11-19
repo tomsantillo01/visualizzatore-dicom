@@ -1,0 +1,1005 @@
+<!doctype html>
+<html lang="it">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Visualizzatore DICOM</title>
+<script src="https://cdn.jsdelivr.net/npm/dicom-parser@1.8.21/dist/dicomParser.min.js"></script>
+<style>
+:root{--bg:#0e1013;--panel:#171a1f;--panel2:#1f242c;--line:#2b313b;--text:#e6e8eb;--muted:#98a2ae;--accent:#4aa3ff;--warn:#ffb454;--measure:#ffd84a}
+*{box-sizing:border-box}
+html,body{height:100%;margin:0}
+body{background:var(--bg);color:var(--text);font:14px/1.4 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;display:flex;flex-direction:column;overflow:hidden}
+header{display:flex;flex-wrap:wrap;gap:6px;align-items:center;padding:8px 12px;background:var(--panel);border-bottom:1px solid var(--line)}
+header h1{font-size:15px;margin:0 10px 0 0;font-weight:600;white-space:nowrap}
+button,select,label.btn{background:var(--panel2);color:var(--text);border:1px solid var(--line);border-radius:6px;padding:5px 10px;font:inherit;cursor:pointer;white-space:nowrap}
+button:hover:not(:disabled),label.btn:hover{border-color:var(--accent)}
+button.active{background:var(--accent);color:#06121f;border-color:var(--accent)}
+button:disabled,select:disabled{opacity:.4;cursor:default}
+label.btn input{display:none}
+.group{display:flex;gap:4px;align-items:center}
+.sep{width:1px;height:24px;background:var(--line);margin:0 4px}
+.spacer{flex:1}
+main{flex:1;display:flex;min-height:0}
+#seriesPanel{width:230px;background:var(--panel);border-right:1px solid var(--line);overflow:auto;flex-shrink:0}
+#seriesPanel h2,#tags h2{font-size:12px;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);margin:10px 12px 6px;font-weight:600}
+.series{display:block;width:100%;text-align:left;border:0;border-bottom:1px solid var(--line);border-radius:0;background:none;padding:8px 12px}
+.series.active{background:var(--panel2);color:var(--text);border-color:var(--line);box-shadow:inset 3px 0 0 var(--accent)}
+.series .mod{display:inline-block;font-size:11px;font-weight:700;background:#2c3a4d;color:#bcd9ff;border-radius:4px;padding:0 5px;margin-right:6px}
+.series .sub{display:block;color:var(--muted);font-size:12px}
+.series .warn{color:var(--warn)}
+.emptyList{color:var(--muted);font-size:13px;padding:0 12px}
+#center{flex:1;display:flex;flex-direction:column;min-width:0}
+#viewport{position:relative;flex:1;min-height:0;background:#000;overflow:hidden}
+#viewport.drop{outline:2px dashed var(--accent);outline-offset:-8px}
+canvas#view{position:absolute;inset:0;width:100%;height:100%;touch-action:none;cursor:crosshair}
+.ov{position:absolute;font:12px/1.35 ui-monospace,Consolas,monospace;color:#eaeaea;text-shadow:0 0 3px #000,0 0 2px #000,0 0 1px #000;pointer-events:none;white-space:pre}
+.tl{top:8px;left:10px}.tr{top:8px;right:10px;text-align:right}.bl{bottom:8px;left:10px}.br{bottom:8px;right:10px;text-align:right}
+#msg,#empty,#loading{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);text-align:center;max-width:min(460px,90%)}
+#msg{color:var(--warn);background:rgba(20,20,20,.85);padding:12px 16px;border-radius:8px;pointer-events:none}
+#empty{color:var(--muted);line-height:1.6}
+#empty strong{color:var(--text);font-size:16px;display:block;margin-bottom:6px}
+#empty .privacy{font-size:12px;margin-top:10px}
+#loading{background:var(--panel);padding:12px 18px;border-radius:8px;border:1px solid var(--line)}
+.bar{display:flex;gap:10px;align-items:center;padding:6px 12px;background:var(--panel);border-top:1px solid var(--line)}
+.bar input[type=range]{flex:1;accent-color:var(--accent)}
+#sliceLabel{font:12px ui-monospace,Consolas,monospace;min-width:72px;text-align:right}
+#status{color:var(--muted);font-size:12px;max-width:45%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+#tags{width:360px;background:var(--panel);border-left:1px solid var(--line);display:flex;flex-direction:column;flex-shrink:0}
+#tags[hidden]{display:none}
+#tagFilter{margin:0 12px 8px;padding:6px 8px;background:var(--panel2);border:1px solid var(--line);border-radius:6px;color:var(--text);font:inherit}
+#tagFile{color:var(--muted);font-size:12px;margin:0 12px 6px;word-break:break-all}
+#tagWrap{overflow:auto;flex:1}
+#tagTable{border-collapse:collapse;width:100%;font-size:12px}
+#tagTable td{padding:3px 8px;border-bottom:1px solid var(--line);vertical-align:top}
+#tagTable td.t{font-family:ui-monospace,Consolas,monospace;color:var(--muted);white-space:nowrap}
+#tagTable td.v{word-break:break-word}
+dialog{background:var(--panel);color:var(--text);border:1px solid var(--line);border-radius:10px;max-width:520px}
+dialog::backdrop{background:rgba(0,0,0,.6)}
+dialog h3{margin-top:0}
+dialog table{border-collapse:collapse;font-size:13px}
+dialog td{padding:3px 10px 3px 0;vertical-align:top}
+dialog td:first-child{color:var(--accent);white-space:nowrap}
+@media (max-width:900px){
+  main{flex-direction:column}
+  #seriesPanel{width:auto;max-height:110px;border-right:0;border-bottom:1px solid var(--line)}
+  #tags{position:fixed;left:0;right:0;bottom:0;height:50vh;width:auto;z-index:5;border-left:0;border-top:1px solid var(--line)}
+  #status{display:none}
+}
+</style>
+</head>
+<body>
+<header>
+  <h1>Visualizzatore DICOM</h1>
+  <label class="btn" title="Apri una cartella con file DICOM">Apri cartella<input type="file" id="dirInput" webkitdirectory multiple></label>
+  <label class="btn" title="Apri uno o più file DICOM">Apri file<input type="file" id="fileInput" multiple></label>
+  <button id="demoBtn" title="Genera una TC sintetica di prova">Demo</button>
+  <span class="sep"></span>
+  <div class="group" id="tools">
+    <button data-tool="window" class="active" title="Trascina: orizzontale = larghezza, verticale = centro (W)">Finestra</button>
+    <button data-tool="pan" title="Sposta l'immagine (P)">Sposta</button>
+    <button data-tool="zoom" title="Trascina su/giù per lo zoom (Z)">Zoom</button>
+    <button data-tool="measure" title="Misura una distanza in mm (M)">Misura</button>
+  </div>
+  <select id="preset" title="Preset di finestra" disabled></select>
+  <button id="invertBtn" title="Inverti i livelli di grigio (I)" disabled>Inverti</button>
+  <button id="resetBtn" title="Ripristina finestra, zoom e misure (R)" disabled>Reset</button>
+  <button id="exportBtn" title="Salva la vista attuale come PNG" disabled>Salva PNG</button>
+  <span class="spacer"></span>
+  <button id="tagsBtn" title="Mostra/nascondi i tag DICOM (T)">Tag DICOM</button>
+  <button id="helpBtn" title="Comandi">?</button>
+</header>
+<main>
+  <aside id="seriesPanel">
+    <h2>Serie</h2>
+    <div id="seriesList"><p class="emptyList">Nessuna serie caricata.</p></div>
+  </aside>
+  <section id="center">
+    <div id="viewport">
+      <canvas id="view"></canvas>
+      <div class="ov tl" id="ovTL"></div>
+      <div class="ov tr" id="ovTR"></div>
+      <div class="ov bl" id="ovBL"></div>
+      <div class="ov br" id="ovBR"></div>
+      <div id="msg" hidden></div>
+      <div id="loading" hidden></div>
+      <div id="empty">
+        <strong>Trascina qui una cartella o dei file DICOM</strong>
+        oppure usa «Apri cartella» / «Apri file».<br>
+        Non hai file a portata di mano? Premi «Demo».
+        <div class="privacy">I file vengono letti solo in locale nel browser: nessun dato viene inviato in rete.</div>
+      </div>
+    </div>
+    <div class="bar">
+      <input type="range" id="slider" min="0" max="0" value="0" disabled aria-label="Immagine">
+      <span id="sliceLabel">– / –</span>
+      <span id="status"></span>
+    </div>
+  </section>
+  <aside id="tags" hidden>
+    <h2>Tag DICOM</h2>
+    <div id="tagFile"></div>
+    <input id="tagFilter" type="search" placeholder="Filtra (nome, tag o valore)…">
+    <div id="tagWrap"><table id="tagTable"><tbody></tbody></table></div>
+  </aside>
+</main>
+
+<dialog id="help">
+  <h3>Comandi</h3>
+  <table>
+    <tr><td>Rotellina</td><td>Scorri le immagini della serie</td></tr>
+    <tr><td>Ctrl + rotellina</td><td>Zoom nel punto del mouse</td></tr>
+    <tr><td>Tasto sinistro</td><td>Strumento attivo (Finestra, Sposta, Zoom, Misura)</td></tr>
+    <tr><td>Tasto destro</td><td>Sposta l'immagine</td></tr>
+    <tr><td>Tasto centrale</td><td>Zoom</td></tr>
+    <tr><td>Doppio clic</td><td>Adatta l'immagine alla finestra</td></tr>
+    <tr><td>↑ ↓ / PagSu PagGiù</td><td>Immagine precedente/successiva (±1 / ±10)</td></tr>
+    <tr><td>Home / Fine</td><td>Prima / ultima immagine</td></tr>
+    <tr><td>W P Z M</td><td>Strumenti Finestra, Sposta, Zoom, Misura</td></tr>
+    <tr><td>I / R / F / T</td><td>Inverti, Reset, Adatta, Tag DICOM</td></tr>
+    <tr><td>Canc</td><td>Cancella le misure dell'immagine corrente</td></tr>
+  </table>
+  <p style="color:var(--muted);font-size:12px">Formati supportati: DICOM non compressi (Little/Big Endian) e compressi JPEG Baseline 8 bit, JPEG Lossless, JPEG-LS, JPEG 2000 e RLE; monocromatici e a colori, anche multi-frame. Non supportati: JPEG Extended a 12 bit e Deflate. I decodificatori vengono scaricati solo la prima volta che servono.<br>Strumento didattico: non usarlo per diagnosi.</p>
+  <form method="dialog"><button>Chiudi</button></form>
+</dialog>
+
+<script>
+'use strict';
+// ============================================================
+//  Dizionario minimo dei tag più comuni: tag -> [nome, VR]
+// ============================================================
+const DICT = {};
+`00020000 UL File Meta Information Group Length|00020001 OB File Meta Information Version|00020002 UI Media Storage SOP Class UID|00020003 UI Media Storage SOP Instance UID|00020010 UI Transfer Syntax UID|00020012 UI Implementation Class UID|00020013 SH Implementation Version Name|
+00080005 CS Specific Character Set|00080008 CS Image Type|00080012 DA Instance Creation Date|00080013 TM Instance Creation Time|00080016 UI SOP Class UID|00080018 UI SOP Instance UID|00080020 DA Study Date|00080021 DA Series Date|00080022 DA Acquisition Date|00080023 DA Content Date|00080030 TM Study Time|00080031 TM Series Time|00080032 TM Acquisition Time|00080033 TM Content Time|00080050 SH Accession Number|00080060 CS Modality|00080070 LO Manufacturer|00080080 LO Institution Name|00080090 PN Referring Physician's Name|00081010 SH Station Name|00081030 LO Study Description|0008103e LO Series Description|00081090 LO Manufacturer's Model Name|
+00100010 PN Patient's Name|00100020 LO Patient ID|00100030 DA Patient's Birth Date|00100040 CS Patient's Sex|00101010 AS Patient's Age|00101020 DS Patient's Size|00101030 DS Patient's Weight|
+00180015 CS Body Part Examined|00180050 DS Slice Thickness|00180060 DS KVP|00180080 DS Repetition Time|00180081 DS Echo Time|00180087 DS Magnetic Field Strength|00180088 DS Spacing Between Slices|00181020 LO Software Versions|00181030 LO Protocol Name|00181150 IS Exposure Time|00181151 IS X-Ray Tube Current|00181152 IS Exposure|00181164 DS Imager Pixel Spacing|00181210 SH Convolution Kernel|00181314 DS Flip Angle|00185100 CS Patient Position|
+0020000d UI Study Instance UID|0020000e UI Series Instance UID|00200010 SH Study ID|00200011 IS Series Number|00200012 IS Acquisition Number|00200013 IS Instance Number|00200032 DS Image Position (Patient)|00200037 DS Image Orientation (Patient)|00200052 UI Frame of Reference UID|00201041 DS Slice Location|
+00280002 US Samples per Pixel|00280004 CS Photometric Interpretation|00280006 US Planar Configuration|00280008 IS Number of Frames|00280010 US Rows|00280011 US Columns|00280030 DS Pixel Spacing|00280100 US Bits Allocated|00280101 US Bits Stored|00280102 US High Bit|00280103 US Pixel Representation|00281050 DS Window Center|00281051 DS Window Width|00281052 DS Rescale Intercept|00281053 DS Rescale Slope|00281054 LO Rescale Type|00281055 LO Window Center & Width Explanation|
+7fe00010 OW Pixel Data`.split('|').forEach(s => {
+  s = s.trim(); if (!s) return;
+  const tag = 'x' + s.slice(0, 8), vr = s.slice(9, 11), name = s.slice(12);
+  DICT[tag] = [name, vr];
+});
+
+const TS_NAMES = {
+  '1.2.840.10008.1.2': 'Implicit VR Little Endian',
+  '1.2.840.10008.1.2.1': 'Explicit VR Little Endian',
+  '1.2.840.10008.1.2.2': 'Explicit VR Big Endian',
+  '1.2.840.10008.1.2.1.99': 'Deflated Explicit VR Little Endian',
+  '1.2.840.10008.1.2.4.50': 'JPEG Baseline',
+  '1.2.840.10008.1.2.4.51': 'JPEG Extended',
+  '1.2.840.10008.1.2.4.57': 'JPEG Lossless',
+  '1.2.840.10008.1.2.4.70': 'JPEG Lossless SV1',
+  '1.2.840.10008.1.2.4.80': 'JPEG-LS Lossless',
+  '1.2.840.10008.1.2.4.81': 'JPEG-LS',
+  '1.2.840.10008.1.2.4.90': 'JPEG 2000 Lossless',
+  '1.2.840.10008.1.2.4.91': 'JPEG 2000',
+  '1.2.840.10008.1.2.5': 'RLE Lossless',
+};
+const UNCOMPRESSED = new Set(['1.2.840.10008.1.2', '1.2.840.10008.1.2.1', '1.2.840.10008.1.2.2']);
+Object.assign(TS_NAMES, {
+  '1.2.840.10008.1.2.4.201': 'HTJ2K Lossless', '1.2.840.10008.1.2.4.202': 'HTJ2K Lossless RPCL', '1.2.840.10008.1.2.4.203': 'HTJ2K',
+});
+// Tipo di decodificatore per ogni Transfer Syntax compressa
+const TS_KIND = {
+  '1.2.840.10008.1.2.4.50': 'jpeg', '1.2.840.10008.1.2.4.51': 'jpeg',
+  '1.2.840.10008.1.2.4.57': 'lossless', '1.2.840.10008.1.2.4.70': 'lossless',
+  '1.2.840.10008.1.2.4.80': 'jls', '1.2.840.10008.1.2.4.81': 'jls',
+  '1.2.840.10008.1.2.4.90': 'j2k', '1.2.840.10008.1.2.4.91': 'j2k',
+  '1.2.840.10008.1.2.4.201': 'j2k', '1.2.840.10008.1.2.4.202': 'j2k', '1.2.840.10008.1.2.4.203': 'j2k',
+  '1.2.840.10008.1.2.5': 'rle',
+};
+
+// ============================================================
+//  Decodificatori: scaricati solo la prima volta che servono
+// ============================================================
+const CDN = 'https://cdn.jsdelivr.net/npm/';
+const OPENJPEG = CDN + '@cornerstonejs/codec-openjpeg@1.3.6/dist/';
+const CHARLS = CDN + '@cornerstonejs/codec-charls@1.2.7/dist/';
+const LOSSLESS = CDN + 'jpeg-lossless-decoder-js@2.1.2/release/lossless-min.js';
+function loadScript(src) {
+  return new Promise((res, rej) => {
+    const s = document.createElement('script'); s.src = src; s.onload = res;
+    s.onerror = () => rej(new Error('download fallito')); document.head.appendChild(s);
+  });
+}
+const CODEC_LOADERS = {
+  lossless: () => import(LOSSLESS).then(m => m.Decoder),
+  j2k: () => loadScript(OPENJPEG + 'openjpegwasm_decode.js').then(() => OpenJPEGWASM({ locateFile: f => OPENJPEG + f })),
+  jls: () => loadScript(CHARLS + 'charlswasm_decode.js').then(() => CharLSWASM({ locateFile: f => CHARLS + f })),
+};
+const codecCache = {};
+function codec(name) {
+  return codecCache[name] || (codecCache[name] = CODEC_LOADERS[name]().catch(e => {
+    delete codecCache[name];
+    throw new Error('Impossibile caricare il decodificatore (serve una connessione internet).');
+  }));
+}
+
+const CT_PRESETS = [
+  ['brain', 'Cervello', 40, 80],
+  ['soft', 'Tessuti molli', 40, 400],
+  ['abd', 'Addome', 60, 400],
+  ['lung', 'Polmone', -600, 1500],
+  ['bone', 'Osso', 400, 1800],
+];
+
+// ============================================================
+//  Utilità
+// ============================================================
+const $ = s => document.querySelector(s);
+const clamp = (v, a, b) => v < a ? a : v > b ? b : v;
+const fmtDate = s => { s = (s || '').trim(); return /^\d{8}$/.test(s) ? `${s.slice(6)}/${s.slice(4, 6)}/${s.slice(0, 4)}` : s; };
+const fmtName = s => (s || '').replace(/\^+/g, ' ').trim();
+const fmtNum = v => (Number.isInteger(v) || Math.abs(v) >= 100) ? String(Math.round(v)) : v.toFixed(1);
+const fmtBytes = n => n < 1024 ? n + ' B' : n < 1048576 ? (n / 1024).toFixed(1) + ' KB' : (n / 1048576).toFixed(1) + ' MB';
+const esc = s => String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+
+function str(ds, tag) { try { const s = ds.string(tag); return s == null ? '' : s.trim(); } catch { return ''; } }
+function num(ds, tag, def) {
+  try { const v = ds.floatString(tag, 0); return Number.isFinite(v) ? v : def; } catch { return def; }
+}
+function floats(ds, tag) {
+  const s = str(ds, tag); if (!s) return null;
+  const a = s.split('\\').map(parseFloat);
+  return a.every(Number.isFinite) ? a : null;
+}
+function u16(ds, tag, def) { try { const v = ds.uint16(tag); return v === undefined ? def : v; } catch { return def; } }
+
+// ============================================================
+//  Stato
+// ============================================================
+const state = {
+  series: [], cur: null, idx: 0,
+  wc: 40, ww: 400, sens: 1, invert: false,
+  tool: 'window',
+  view: { scale: 1, x: 0, y: 0 }, autoFit: true,
+  cursor: null, dirty: true,
+  measures: new Map(),
+};
+const canvas = $('#view'), ctx = canvas.getContext('2d');
+const off = document.createElement('canvas'), offCtx = off.getContext('2d');
+const viewport = $('#viewport');
+
+// ============================================================
+//  Lettura dei file
+// ============================================================
+async function parseFile(file) {
+  const bytes = new Uint8Array(await file.arrayBuffer());
+  let ds;
+  try {
+    ds = dicomParser.parseDicom(bytes);
+  } catch (e) {
+    // File senza preambolo "DICM": riprova assumendo Implicit VR Little Endian
+    try { ds = dicomParser.parseDicom(bytes, { TransferSyntaxUID: '1.2.840.10008.1.2' }); }
+    catch { return { error: true }; }
+  }
+  return { ds, bytes };
+}
+
+function buildImages(ds, bytes, file) {
+  const pd = ds.elements.x7fe00010;
+  if (!pd) return [];   // DICOMDIR, report strutturati, ecc.
+  const ts = str(ds, 'x00020010') || '1.2.840.10008.1.2';
+  const spacing = floats(ds, 'x00280030') || floats(ds, 'x00181164');
+  const info = {
+    ts,
+    rows: u16(ds, 'x00280010', 0), cols: u16(ds, 'x00280011', 0),
+    bitsAllocated: u16(ds, 'x00280100', 16), bitsStored: u16(ds, 'x00280101', 0),
+    pixelRep: u16(ds, 'x00280103', 0),
+    spp: u16(ds, 'x00280002', 1), planar: u16(ds, 'x00280006', 0),
+    photometric: (str(ds, 'x00280004') || 'MONOCHROME2').toUpperCase(),
+    slope: num(ds, 'x00281053', 1) || 1, intercept: num(ds, 'x00281052', 0),
+    wc: num(ds, 'x00281050', null), ww: num(ds, 'x00281051', null),
+    frames: parseInt(str(ds, 'x00280008'), 10) || 1,
+    spacing: spacing && spacing.length >= 2 && spacing[0] > 0 && spacing[1] > 0 ? spacing : null,
+    ipp: floats(ds, 'x00200032'), iop: floats(ds, 'x00200037'),
+    instance: parseInt(str(ds, 'x00200013'), 10),
+    thickness: num(ds, 'x00180050', null),
+    seriesUID: str(ds, 'x0020000e') || ('file:' + file.name),
+    seriesDesc: str(ds, 'x0008103e'), seriesNumber: str(ds, 'x00200011'),
+    modality: str(ds, 'x00080060') || '??',
+    patient: fmtName(str(ds, 'x00100010')), patientId: str(ds, 'x00100020'),
+    studyDate: fmtDate(str(ds, 'x00080020')), studyDesc: str(ds, 'x00081030'),
+    rescaleType: str(ds, 'x00281054'),
+  };
+  let error = null;
+  const kind = pd.encapsulatedPixelData ? TS_KIND[ts] : (UNCOMPRESSED.has(ts) ? 'raw' : null);
+  if (!info.rows || !info.cols) error = 'Dimensioni immagine mancanti';
+  else if (!kind) error = `Formato "${TS_NAMES[ts] || ts}" non supportato`;
+  else if (info.photometric === 'PALETTE COLOR') error = 'Palette Color non supportato';
+  else if (info.spp !== 1 && info.spp !== 3) error = `Samples per Pixel = ${info.spp} non supportato`;
+  const n = error ? 1 : info.frames;
+  const out = [];
+  for (let f = 0; f < n; f++) out.push({ ds, bytes, file, info, frame: f, error, kind });
+  return out;
+}
+
+async function loadFiles(fileList) {
+  const files = Array.from(fileList || []);
+  if (!files.length) return;
+  if (typeof dicomParser === 'undefined') {
+    setStatus('Libreria dicom-parser non caricata: serve una connessione internet la prima volta.', true);
+    return;
+  }
+  const loading = $('#loading'); loading.hidden = false; $('#empty').hidden = true;
+  const bySeries = new Map();
+  let skipped = 0, images = 0;
+  for (let i = 0; i < files.length; i++) {
+    if (i % 8 === 0) { loading.textContent = `Lettura ${i} / ${files.length}…`; await new Promise(r => setTimeout(r)); }
+    let res;
+    try { res = await parseFile(files[i]); } catch { res = { error: true }; }
+    if (res.error) { skipped++; continue; }
+    const imgs = buildImages(res.ds, res.bytes, files[i]);
+    if (!imgs.length) { skipped++; continue; }
+    for (const img of imgs) {
+      const key = img.info.seriesUID;
+      if (!bySeries.has(key)) bySeries.set(key, { uid: key, images: [], info: img.info });
+      bySeries.get(key).images.push(img);
+      images++;
+    }
+  }
+  loading.hidden = true;
+  if (!images) {
+    setStatus(`Nessuna immagine DICOM trovata (${skipped} file ignorati).`, true);
+    $('#empty').hidden = state.series.length > 0;
+    return;
+  }
+  state.series = [...bySeries.values()];
+  state.series.forEach(sortSeries);
+  state.series.sort((a, b) => (parseInt(a.info.seriesNumber) || 0) - (parseInt(b.info.seriesNumber) || 0));
+  state.measures.clear();
+  renderSeriesList();
+  selectSeries(0);
+  setStatus(`${images} immagini in ${state.series.length} serie` + (skipped ? ` · ${skipped} file ignorati` : ''));
+}
+
+// Ordina le fette lungo la normale al piano (posizione reale nel paziente),
+// altrimenti per Instance Number, frame e nome file.
+function sortSeries(s) {
+  const imgs = s.images, iop = imgs[0].info.iop;
+  const geo = iop && iop.length === 6 && imgs.every(m => m.info.ipp && m.info.ipp.length === 3);
+  if (geo) {
+    const r = iop.slice(0, 3), c = iop.slice(3);
+    const n = [r[1] * c[2] - r[2] * c[1], r[2] * c[0] - r[0] * c[2], r[0] * c[1] - r[1] * c[0]];
+    imgs.forEach(m => m.pos = m.info.ipp[0] * n[0] + m.info.ipp[1] * n[1] + m.info.ipp[2] * n[2]);
+  }
+  imgs.sort((a, b) =>
+    (geo && a.pos !== b.pos ? b.pos - a.pos : 0) ||   // assiali: dalla testa ai piedi
+    ((a.info.instance || 0) - (b.info.instance || 0)) ||
+    (a.frame - b.frame) ||
+    a.file.name.localeCompare(b.file.name, undefined, { numeric: true }));
+}
+
+// ============================================================
+//  Pixel
+// ============================================================
+// Interpreta dei byte come array di pixel (8/16/32 bit, con o senza segno)
+function makeTyped(bytes, bpp, signed) {
+  const ctors = { 1: [Uint8Array, Int8Array], 2: [Uint16Array, Int16Array], 4: [Uint32Array, Int32Array] }[bpp];
+  if (!ctors) throw new Error(`${bpp * 8} bit per campione non supportati`);
+  if (bytes.byteOffset % bpp) bytes = bytes.slice();
+  return new ctors[signed ? 1 : 0](bytes.buffer, bytes.byteOffset, Math.floor(bytes.length / bpp));
+}
+
+// Pixel non compressi: letti direttamente dal file
+function decodeUncompressed(img) {
+  const I = img.info, n = I.rows * I.cols * I.spp, bpp = I.bitsAllocated / 8;
+  if (I.bitsAllocated % 8) throw new Error(`Bits Allocated = ${I.bitsAllocated} non supportato`);
+  const el = img.ds.elements.x7fe00010, start = img.frame * n * bpp;
+  if (el.dataOffset + start + n * bpp > img.bytes.length) throw new Error('Dati pixel incompleti (file troncato?)');
+  let data = img.bytes.subarray(el.dataOffset, el.dataOffset + el.length);
+  // Big Endian: i byte vanno girati per ogni valore (OW a 8 bit = coppie di byte)
+  const unit = bpp > 1 ? bpp : (el.vr === 'OB' ? 1 : 2);
+  if (I.ts === '1.2.840.10008.1.2.2' && unit > 1) {
+    if (!img.ds.swapped) {
+      const c = data.slice();
+      for (let i = 0; i + unit <= c.length; i += unit) c.subarray(i, i + unit).reverse();
+      img.ds.swapped = c;
+    }
+    data = img.ds.swapped;
+  }
+  return { pixels: makeTyped(data.subarray(start, start + n * bpp), bpp, I.pixelRep) };
+}
+
+// Estrae i byte compressi di un frame dai frammenti incapsulati
+function frameBytes(img) {
+  const ds = img.ds, el = ds.elements.x7fe00010, frags = el.fragments || [];
+  if (img.info.frames === 1) return dicomParser.readEncapsulatedPixelDataFromFragments(ds, el, 0, frags.length);
+  if (el.basicOffsetTable && el.basicOffsetTable.length) return dicomParser.readEncapsulatedImageFrame(ds, el, img.frame);
+  if (frags.length === img.info.frames) return dicomParser.readEncapsulatedPixelDataFromFragments(ds, el, img.frame, 1);
+  if (img.kind === 'jpeg' || img.kind === 'lossless')
+    return dicomParser.readEncapsulatedImageFrame(ds, el, img.frame, dicomParser.createJPEGBasicOffsetTable(ds, el));
+  throw new Error('Struttura multi-frame compressa non supportata');
+}
+
+// RLE Lossless: un segmento PackBits per ogni byte di ogni campione (MSB per primo)
+function decodeRLE(bytes, I) {
+  const n = I.rows * I.cols, bpp = I.bitsAllocated / 8, spp = I.spp;
+  const dv = new DataView(bytes.buffer, bytes.byteOffset, bytes.length);
+  const nseg = dv.getUint32(0, true);
+  if (nseg !== spp * bpp) throw new Error(`RLE: ${nseg} segmenti, attesi ${spp * bpp}`);
+  const out = new Uint8Array(n * spp * bpp);
+  for (let s = 0; s < nseg; s++) {
+    const start = dv.getUint32(4 + 4 * s, true);
+    const end = s + 1 < nseg ? dv.getUint32(8 + 4 * s, true) : bytes.length;
+    let o = Math.floor(s / bpp) * n * bpp + (bpp - 1 - s % bpp), p = start, w = 0;
+    while (p < end && w < n) {
+      const c = bytes[p++];
+      if (c < 128) { for (let k = 0; k <= c && w < n; k++, w++, o += bpp) out[o] = bytes[p++]; }
+      else if (c > 128) { const v = bytes[p++]; for (let k = 0; k < 257 - c && w < n; k++, w++, o += bpp) out[o] = v; }
+    }
+  }
+  return { pixels: makeTyped(out, bpp, I.pixelRep), planar: spp > 1 ? 1 : 0 };
+}
+
+// JPEG Baseline/Extended a 8 bit: decodificato dal browser stesso
+async function decodeJPEG(bytes, I) {
+  let bmp;
+  try { bmp = await createImageBitmap(new Blob([bytes], { type: 'image/jpeg' }), { colorSpaceConversion: 'none', premultiplyAlpha: 'none' }); }
+  catch { throw new Error('JPEG non decodificabile dal browser (probabilmente a 12 bit)'); }
+  const c = document.createElement('canvas'); c.width = bmp.width; c.height = bmp.height;
+  const g = c.getContext('2d', { willReadFrequently: true }); g.drawImage(bmp, 0, 0);
+  const rgba = g.getImageData(0, 0, c.width, c.height).data, n = c.width * c.height;
+  if (I.spp === 1) { const out = new Uint8Array(n); for (let i = 0; i < n; i++) out[i] = rgba[4 * i]; return { pixels: out }; }
+  const out = new Uint8Array(3 * n);
+  for (let i = 0; i < n; i++) { out[3 * i] = rgba[4 * i]; out[3 * i + 1] = rgba[4 * i + 1]; out[3 * i + 2] = rgba[4 * i + 2]; }
+  return { pixels: out, planar: 0, photometric: 'RGB' };
+}
+
+async function decodeLossless(bytes, I) {
+  const Decoder = await codec('lossless');
+  const bpp = I.bitsAllocated > 8 ? 2 : 1;
+  const out = new Decoder().decode(bytes.buffer, bytes.byteOffset, bytes.length, bpp);
+  return { pixels: makeTyped(new Uint8Array(out.buffer, out.byteOffset, out.byteLength), bpp, I.pixelRep), planar: 0 };
+}
+
+// JPEG 2000 (OpenJPEG) e JPEG-LS (CharLS): stessi metodi, WebAssembly
+async function decodeWasm(kind, bytes, I) {
+  const m = await codec(kind);
+  const d = kind === 'j2k' ? new m.J2KDecoder() : new m.JpegLSDecoder();
+  try {
+    d.getEncodedBuffer(bytes.length).set(bytes);
+    d.decode();
+    const fi = d.getFrameInfo(), bpp = fi.bitsPerSample > 8 ? 2 : 1;
+    if (fi.width !== I.cols || fi.height !== I.rows) throw new Error('Dimensioni decodificate diverse da quelle del file');
+    const out = new Uint8Array(d.getDecodedBuffer());          // copia fuori dalla memoria WASM
+    return { pixels: makeTyped(out, bpp, I.pixelRep), planar: 0, photometric: I.spp === 3 && kind === 'j2k' ? 'RGB' : undefined };
+  } finally { d.delete(); }
+}
+
+async function decodeImage(img) {
+  const I = img.info;
+  let r;
+  if (img.kind === 'raw') r = decodeUncompressed(img);
+  else {
+    const bytes = frameBytes(img);
+    if (img.kind === 'rle') r = decodeRLE(bytes, I);
+    else if (img.kind === 'jpeg') r = await decodeJPEG(bytes, I);
+    else if (img.kind === 'lossless') r = await decodeLossless(bytes, I);
+    else r = await decodeWasm(img.kind, bytes, I);
+  }
+  const arr = r.pixels, need = I.rows * I.cols * I.spp;
+  if (arr.length < need) throw new Error('Dati pixel incompleti dopo la decodifica');
+  const bs = I.bitsStored;
+  if (arr.BYTES_PER_ELEMENT === 2 && bs && bs < 16) {    // ignora i bit oltre Bits Stored
+    if (I.pixelRep) { const sh = 32 - bs; for (let i = 0; i < need; i++) arr[i] = (arr[i] << sh) >> sh; }
+    else { const m = (1 << bs) - 1; for (let i = 0; i < need; i++) arr[i] &= m; }
+  }
+  img.planar = r.planar ?? I.planar;
+  img.photometric = r.photometric || I.photometric;
+  return arr;
+}
+
+// Decodifica (una sola volta) e restituisce i pixel; in caso di errore li segna sull'immagine
+function prepare(img) {
+  if (img.raw || img.error) return Promise.resolve(img.raw);
+  if (!img.decoding) img.decoding = decodeImage(img)
+    .then(a => (img.raw = a))
+    .catch(e => { img.error = e.message || String(e); })
+    .finally(() => { img.decoding = null; });
+  return img.decoding;
+}
+function getRaw(img) { if (!img.raw) throw new Error('Immagine non ancora decodificata'); return img.raw; }
+
+// Pre-decodifica le fette vicine per uno scorrimento fluido
+let prefetchTimer = null;
+function prefetchAround() {
+  clearTimeout(prefetchTimer);
+  prefetchTimer = setTimeout(async () => {
+    const s = state.cur; if (!s) return;
+    for (const d of [1, -1, 2, -2, 3, -3]) {
+      const m = s.images[state.idx + d];
+      if (m && !m.raw && !m.error) { await prepare(m); if (s !== state.cur) return; }
+    }
+  }, 30);
+}
+
+function getStats(img) {
+  if (img.stats) return img.stats;
+  const raw = getRaw(img); let mn = Infinity, mx = -Infinity;
+  for (let i = 0; i < raw.length; i++) { const v = raw[i]; if (v < mn) mn = v; if (v > mx) mx = v; }
+  let a = mn * img.info.slope + img.info.intercept, b = mx * img.info.slope + img.info.intercept;
+  if (a > b) [a, b] = [b, a];
+  return img.stats = { min: a, max: b };
+}
+
+const isColor = img => img.info.spp === 3;
+
+function renderOffscreen(img) {
+  const I = img.info, raw = getRaw(img);
+  if (off.width !== I.cols || off.height !== I.rows) { off.width = I.cols; off.height = I.rows; }
+  const id = offCtx.createImageData(I.cols, I.rows), d = id.data;
+  if (!isColor(img)) {
+    const ww = Math.max(1, state.ww), lo = state.wc - ww / 2, k = 255 / ww;
+    const inv = (img.photometric === 'MONOCHROME1') !== state.invert;
+    const s = I.slope, b = I.intercept;
+    for (let i = 0, j = 0; i < raw.length; i++, j += 4) {
+      let g = ((raw[i] * s + b) - lo) * k;
+      g = g < 0 ? 0 : g > 255 ? 255 : g;
+      if (inv) g = 255 - g;
+      d[j] = d[j + 1] = d[j + 2] = g; d[j + 3] = 255;
+    }
+  } else {
+    const n = I.rows * I.cols, ycc = img.photometric.startsWith('YBR');
+    // colori a 16/32 bit: riporta i valori su 8 bit
+    const bits = raw.BYTES_PER_ELEMENT > 1 ? (I.bitsStored || raw.BYTES_PER_ELEMENT * 8) : 8, sh = Math.max(0, bits - 8);
+    for (let p = 0; p < n; p++) {
+      let r, g, b;
+      if (img.planar) { r = raw[p]; g = raw[p + n]; b = raw[p + 2 * n]; }
+      else { r = raw[3 * p]; g = raw[3 * p + 1]; b = raw[3 * p + 2]; }
+      if (sh) { r = r / 2 ** sh; g = g / 2 ** sh; b = b / 2 ** sh; }
+      if (ycc) { const y = r, cb = g - 128, cr = b - 128; r = y + 1.402 * cr; g = y - 0.344136 * cb - 0.714136 * cr; b = y + 1.772 * cb; }
+      if (state.invert) { r = 255 - r; g = 255 - g; b = 255 - b; }
+      const j = 4 * p; d[j] = r; d[j + 1] = g; d[j + 2] = b; d[j + 3] = 255;
+    }
+  }
+  offCtx.putImageData(id, 0, 0);
+}
+
+// ============================================================
+//  Geometria della vista
+// ============================================================
+const curImg = () => state.cur ? state.cur.images[state.idx] : null;
+function aspect(img) {
+  const sp = img.info.spacing; if (!sp) return { sx: 1, sy: 1 };
+  const m = Math.min(sp[0], sp[1]); return { sx: sp[1] / m, sy: sp[0] / m };
+}
+function viewSize() { const r = viewport.getBoundingClientRect(); return { w: r.width, h: r.height }; }
+function fitView() {
+  const img = curImg(); if (!img) return;
+  const { w, h } = viewSize(), { sx, sy } = aspect(img);
+  const iw = img.info.cols * sx, ih = img.info.rows * sy;
+  const s = Math.min(w / iw, h / ih) * 0.96;
+  state.view = { scale: s, x: (w - iw * s) / 2, y: (h - ih * s) / 2 };
+  state.autoFit = true;
+}
+function toImage(px, py) {
+  const img = curImg(), { sx, sy } = aspect(img), v = state.view;
+  return { x: (px - v.x) / (v.scale * sx), y: (py - v.y) / (v.scale * sy) };
+}
+function toScreen(p) {
+  const img = curImg(), { sx, sy } = aspect(img), v = state.view;
+  return { x: v.x + p.x * v.scale * sx, y: v.y + p.y * v.scale * sy };
+}
+function zoomAt(factor, px, py) {
+  const v = state.view, ns = clamp(v.scale * factor, 0.05, 50), f = ns / v.scale;
+  v.x = px - (px - v.x) * f; v.y = py - (py - v.y) * f; v.scale = ns;
+  state.autoFit = false; scheduleDraw();
+}
+
+// ============================================================
+//  Disegno
+// ============================================================
+let rafPending = false;
+function scheduleDraw() { if (!rafPending) { rafPending = true; requestAnimationFrame(() => { rafPending = false; draw(); }); } }
+
+function draw() {
+  const dpr = window.devicePixelRatio || 1, { w, h } = viewSize();
+  const W = Math.max(1, Math.round(w * dpr)), H = Math.max(1, Math.round(h * dpr));
+  if (canvas.width !== W || canvas.height !== H) { canvas.width = W; canvas.height = H; }
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  ctx.fillStyle = '#000'; ctx.fillRect(0, 0, w, h);
+  const img = curImg(), msg = $('#msg');
+  if (!img) { msg.hidden = true; updateOverlays(null); return; }
+  if (img.error) { msg.textContent = img.error; msg.hidden = false; updateOverlays(img); return; }
+  if (!img.raw) {                               // compressa: decodifica e poi ridisegna
+    if (!img.decoding) { msg.textContent = 'Decodifica in corso…'; msg.hidden = false; }
+    prepare(img).then(() => { if (curImg() === img) { state.dirty = true; scheduleDraw(); } });
+    updateOverlays(img); return;
+  }
+  prefetchAround();
+  try {
+    if (state.dirty) { renderOffscreen(img); state.dirty = false; }
+  } catch (e) {
+    img.error = e.message; msg.textContent = e.message; msg.hidden = false; updateOverlays(img); return;
+  }
+  msg.hidden = true;
+  const { sx, sy } = aspect(img), v = state.view;
+  ctx.imageSmoothingEnabled = true; ctx.imageSmoothingQuality = 'high';
+  ctx.drawImage(off, v.x, v.y, img.info.cols * sx * v.scale, img.info.rows * sy * v.scale);
+  drawMeasures(img);
+  updateOverlays(img);
+}
+
+function measuresFor(img) { if (!state.measures.has(img)) state.measures.set(img, []); return state.measures.get(img); }
+function measureLabel(img, m) {
+  const sp = img.info.spacing, dx = m.b.x - m.a.x, dy = m.b.y - m.a.y;
+  return sp ? `${Math.hypot(dx * sp[1], dy * sp[0]).toFixed(1)} mm` : `${Math.hypot(dx, dy).toFixed(1)} px`;
+}
+function drawMeasures(img) {
+  const list = state.measures.get(img); if (!list) return;
+  ctx.lineWidth = 1.5; ctx.font = '12px ui-monospace,Consolas,monospace';
+  for (const m of list) {
+    const a = toScreen(m.a), b = toScreen(m.b);
+    ctx.strokeStyle = getComputedStyle(document.documentElement).getPropertyValue('--measure');
+    ctx.beginPath(); ctx.moveTo(a.x, a.y); ctx.lineTo(b.x, b.y); ctx.stroke();
+    for (const p of [a, b]) { ctx.beginPath(); ctx.arc(p.x, p.y, 3, 0, Math.PI * 2); ctx.stroke(); }
+    const t = measureLabel(img, m), tx = (a.x + b.x) / 2 + 8, ty = (a.y + b.y) / 2 - 8;
+    ctx.lineWidth = 3; ctx.strokeStyle = '#000'; ctx.strokeText(t, tx, ty);
+    ctx.fillStyle = ctx.strokeStyle = getComputedStyle(document.documentElement).getPropertyValue('--measure');
+    ctx.fillText(t, tx, ty); ctx.lineWidth = 1.5;
+  }
+}
+
+function updateOverlays(img) {
+  const tl = $('#ovTL'), tr = $('#ovTR'), bl = $('#ovBL'), br = $('#ovBR');
+  if (!img) { tl.textContent = tr.textContent = bl.textContent = br.textContent = ''; return; }
+  const I = img.info, s = state.cur, N = s.images.length;
+  tl.textContent = [I.patient || '(senza nome)', I.patientId, I.studyDate, I.studyDesc].filter(Boolean).join('\n');
+  tr.textContent = [`${I.modality}  Serie ${I.seriesNumber || '-'}`, I.seriesDesc,
+    `Img ${state.idx + 1} / ${N}` + (I.frames > 1 ? `  (frame ${img.frame + 1})` : ''),
+    I.ipp && I.ipp.length === 3 ? `Pos ${I.ipp.map(v => v.toFixed(1)).join(', ')}` : ''].filter(Boolean).join('\n');
+  const lines = [];
+  if (!img.error) {
+    if (!isColor(img)) lines.push(`L: ${fmtNum(state.wc)}  W: ${fmtNum(state.ww)}`);
+    lines.push(`Zoom ${Math.round(state.view.scale * 100 * aspect(img).sx)}%`);
+    lines.push(`${I.cols}×${I.rows}` + (I.spacing ? `  ${I.spacing[1]}×${I.spacing[0]} mm` : '') + (I.thickness ? `  sp. ${I.thickness} mm` : ''));
+  }
+  bl.textContent = lines.join('\n');
+  let cur = '';
+  if (state.cursor && !img.error && img.raw) {
+    const p = toImage(state.cursor.x, state.cursor.y), x = Math.floor(p.x), y = Math.floor(p.y);
+    if (x >= 0 && y >= 0 && x < I.cols && y < I.rows) {
+      const raw = img.raw;
+      if (isColor(img)) {
+        const n = I.rows * I.cols, q = y * I.cols + x;
+        const v = img.planar ? [raw[q], raw[q + n], raw[q + 2 * n]] : [raw[3 * q], raw[3 * q + 1], raw[3 * q + 2]];
+        cur = `X ${x}  Y ${y}\nRGB ${v.join(', ')}`;
+      } else {
+        const v = raw[y * I.cols + x] * I.slope + I.intercept;
+        const unit = I.modality === 'CT' && (!I.rescaleType || /HU/i.test(I.rescaleType)) ? ' HU' : '';
+        cur = `X ${x}  Y ${y}\nValore ${fmtNum(v)}${unit}`;
+      }
+    }
+  }
+  br.textContent = cur;
+}
+
+// ============================================================
+//  Serie, fette, finestra
+// ============================================================
+function renderSeriesList() {
+  const box = $('#seriesList'); box.innerHTML = '';
+  state.series.forEach((s, i) => {
+    const b = document.createElement('button'); b.className = 'series';
+    const err = s.images.every(m => m.error);
+    b.innerHTML = `<span class="mod">${esc(s.info.modality)}</span>${esc(s.info.seriesDesc || 'Serie ' + (s.info.seriesNumber || i + 1))}` +
+      `<span class="sub">${s.images.length} immagini${s.info.studyDate ? ' · ' + esc(s.info.studyDate) : ''}</span>` +
+      (err ? `<span class="sub warn">formato non supportato</span>` : '');
+    b.onclick = () => selectSeries(i);
+    box.appendChild(b);
+  });
+}
+
+function selectSeries(i) {
+  state.cur = state.series[i];
+  document.querySelectorAll('.series').forEach((b, k) => b.classList.toggle('active', k === i));
+  const N = state.cur.images.length;
+  state.idx = Math.floor((N - 1) / 2);
+  const slider = $('#slider'); slider.max = N - 1; slider.value = state.idx; slider.disabled = N < 2;
+  $('#empty').hidden = true;
+  ['#invertBtn', '#resetBtn', '#exportBtn'].forEach(s => $(s).disabled = false);
+  state.invert = false; $('#invertBtn').classList.remove('active');
+  buildPresets();
+  resetWindow();
+  fitView();
+  updateSliceLabel(); renderTags(); scheduleDraw();
+}
+
+function setSlice(i) {
+  if (!state.cur) return;
+  i = clamp(i, 0, state.cur.images.length - 1);
+  if (i === state.idx) return;
+  state.idx = i; $('#slider').value = i; state.dirty = true;
+  updateSliceLabel(); renderTags(); scheduleDraw();
+}
+function updateSliceLabel() {
+  $('#sliceLabel').textContent = state.cur ? `${state.idx + 1} / ${state.cur.images.length}` : '– / –';
+}
+
+function buildPresets() {
+  const sel = $('#preset'), mod = state.cur.info.modality;
+  const opts = [['file', 'Finestra dal file'], ['auto', 'Automatica (min/max)']];
+  if (mod === 'CT') CT_PRESETS.forEach(p => opts.push([p[0], p[1] + ` (${p[2]}/${p[3]})`]));
+  sel.innerHTML = opts.map(o => `<option value="${o[0]}">${esc(o[1])}</option>`).join('') + '<option value="custom" disabled>Personalizzata</option>';
+  sel.disabled = state.cur.images.every(m => m.error || isColor(m));
+}
+
+async function applyPreset(key) {
+  const s = state.cur; let img = curImg();
+  if (img) await prepare(img);
+  if (!img || img.error) {                       // cerca un'immagine leggibile tra le prime
+    img = null;
+    for (const m of s.images.slice(0, 10)) { await prepare(m); if (!m.error) { img = m; break; } }
+  }
+  if (s !== state.cur || !img || isColor(img)) return;
+  let st; try { st = getStats(img); } catch { return; }
+  state.sens = Math.max((st.max - st.min) / 800, 0.05);
+  const p = CT_PRESETS.find(p => p[0] === key);
+  if (p) { state.wc = p[2]; state.ww = p[3]; }
+  else if (key === 'file' && img.info.wc != null && img.info.ww > 0) { state.wc = img.info.wc; state.ww = img.info.ww; }
+  else { state.wc = (st.min + st.max) / 2; state.ww = Math.max(1, st.max - st.min); key = key === 'file' ? 'auto' : key; }
+  $('#preset').value = key; state.dirty = true; scheduleDraw();
+}
+function resetWindow() { applyPreset('file'); }
+
+function setTool(t) {
+  state.tool = t;
+  document.querySelectorAll('#tools button').forEach(b => b.classList.toggle('active', b.dataset.tool === t));
+}
+
+// ============================================================
+//  Pannello tag
+// ============================================================
+const NUMERIC = { US: [2, 'uint16'], SS: [2, 'int16'], UL: [4, 'uint32'], SL: [4, 'int32'], FL: [4, 'float'], FD: [8, 'double'] };
+function tagValue(ds, tag, el) {
+  if (el.items) return `[sequenza: ${el.items.length} elementi]`;
+  if (tag === 'x7fe00010') return `[dati pixel: ${fmtBytes(el.length)}${el.encapsulatedPixelData ? ', compressi' : ''}]`;
+  if (!el.length) return '';
+  const vr = el.vr || (DICT[tag] && DICT[tag][1]);
+  if (vr && NUMERIC[vr]) {
+    const [sz, fn] = NUMERIC[vr], count = Math.floor(el.length / sz), vals = [];
+    for (let i = 0; i < Math.min(count, 16); i++) vals.push(ds[fn](tag, i));
+    return vals.join(' \\ ') + (count > 16 ? ' …' : '');
+  }
+  if (vr && /^(OB|OW|OF|OD|OL|UN|AT)$/.test(vr)) return `[binario: ${fmtBytes(el.length)}]`;
+  if (el.length > 1024) return `[${fmtBytes(el.length)}]`;
+  let s = str(ds, tag);
+  if (!vr && /[\x00-\x08\x0e-\x1f]/.test(s)) return `[binario: ${fmtBytes(el.length)}]`;
+  if (tag === 'x00020010' && TS_NAMES[s]) s += `  (${TS_NAMES[s]})`;
+  if (vr === 'PN') s = fmtName(s);
+  if (vr === 'DA') s = fmtDate(s);
+  return s.length > 300 ? s.slice(0, 300) + ' …' : s;
+}
+
+let tagsShownFor = null;
+function renderTags(force) {
+  const panel = $('#tags'); if (panel.hidden) return;
+  const img = curImg(), tbody = $('#tagTable tbody');
+  if (!img) { tbody.innerHTML = ''; $('#tagFile').textContent = ''; return; }
+  const q = $('#tagFilter').value.trim().toLowerCase();
+  const key = img.ds + '|' + q;
+  if (!force && tagsShownFor && tagsShownFor.ds === img.ds && tagsShownFor.q === q) return;
+  tagsShownFor = { ds: img.ds, q };
+  $('#tagFile').textContent = img.file.webkitRelativePath || img.file.name;
+  const ds = img.ds, rows = [];
+  for (const tag of Object.keys(ds.elements).sort()) {
+    const el = ds.elements[tag];
+    const g = parseInt(tag.slice(1, 5), 16);
+    const name = DICT[tag] ? DICT[tag][0] : (g % 2 ? '(privato)' : '');
+    let val; try { val = tagValue(ds, tag, el); } catch { val = '?'; }
+    const t = `(${tag.slice(1, 5)},${tag.slice(5)})`.toUpperCase();
+    if (q && !(t.toLowerCase().includes(q) || name.toLowerCase().includes(q) || val.toLowerCase().includes(q))) continue;
+    rows.push(`<tr><td class="t">${t}</td><td>${esc(name)}</td><td class="v">${esc(val)}</td></tr>`);
+  }
+  tbody.innerHTML = rows.join('') || '<tr><td colspan="3" style="color:var(--muted)">Nessun tag corrisponde.</td></tr>';
+}
+
+// ============================================================
+//  Eventi
+// ============================================================
+let drag = null;
+canvas.addEventListener('contextmenu', e => e.preventDefault());
+canvas.addEventListener('pointerdown', e => {
+  const img = curImg(); if (!img || img.error) return;
+  canvas.setPointerCapture(e.pointerId);
+  const tool = e.button === 2 ? 'pan' : e.button === 1 ? 'zoom' : state.tool;
+  drag = { tool, x: e.offsetX, y: e.offsetY, wc: state.wc, ww: state.ww, vx: state.view.x, vy: state.view.y, scale: state.view.scale };
+  if (tool === 'measure') { const p = toImage(e.offsetX, e.offsetY); drag.m = { a: p, b: p }; measuresFor(img).push(drag.m); }
+  e.preventDefault();
+});
+canvas.addEventListener('pointermove', e => {
+  state.cursor = { x: e.offsetX, y: e.offsetY };
+  if (drag) {
+    const dx = e.offsetX - drag.x, dy = e.offsetY - drag.y;
+    switch (drag.tool) {
+      case 'window':
+        if (isColor(curImg())) break;
+        state.ww = Math.max(1, drag.ww + dx * state.sens);
+        state.wc = drag.wc + dy * state.sens;
+        state.dirty = true; $('#preset').value = 'custom'; break;
+      case 'pan':
+        state.view.x = drag.vx + dx; state.view.y = drag.vy + dy; state.autoFit = false; break;
+      case 'zoom': {
+        const ns = clamp(drag.scale * Math.exp(-dy * 0.01), 0.05, 50), f = ns / drag.scale;
+        state.view = { scale: ns, x: drag.x - (drag.x - drag.vx) * f, y: drag.y - (drag.y - drag.vy) * f };
+        state.autoFit = false; break;
+      }
+      case 'measure': drag.m.b = toImage(e.offsetX, e.offsetY); break;
+    }
+  }
+  scheduleDraw();
+});
+function endDrag() {
+  if (drag && drag.m) {
+    const a = toScreen(drag.m.a), b = toScreen(drag.m.b);
+    if (Math.hypot(a.x - b.x, a.y - b.y) < 3) { const l = measuresFor(curImg()); l.splice(l.indexOf(drag.m), 1); }
+  }
+  drag = null; scheduleDraw();
+}
+canvas.addEventListener('pointerup', endDrag);
+canvas.addEventListener('pointercancel', endDrag);
+canvas.addEventListener('pointerleave', () => { state.cursor = null; scheduleDraw(); });
+canvas.addEventListener('dblclick', () => { fitView(); scheduleDraw(); });
+
+let wheelAcc = 0;
+canvas.addEventListener('wheel', e => {
+  e.preventDefault(); if (!state.cur) return;
+  const dy = e.deltaMode === 1 ? e.deltaY * 33 : e.deltaY;
+  if (e.ctrlKey || e.metaKey) { zoomAt(Math.exp(-dy * 0.0015), e.offsetX, e.offsetY); return; }
+  if (Math.abs(dy) >= 50) { setSlice(state.idx + Math.sign(dy)); wheelAcc = 0; return; }
+  wheelAcc += dy;                                   // trackpad: accumula
+  if (Math.abs(wheelAcc) >= 50) { setSlice(state.idx + Math.sign(wheelAcc)); wheelAcc = 0; }
+}, { passive: false });
+
+$('#slider').addEventListener('input', e => setSlice(+e.target.value));
+$('#preset').addEventListener('change', e => applyPreset(e.target.value));
+$('#tools').addEventListener('click', e => { const t = e.target.closest('button'); if (t) setTool(t.dataset.tool); });
+$('#invertBtn').onclick = toggleInvert;
+$('#resetBtn').onclick = resetAll;
+$('#exportBtn').onclick = exportPng;
+$('#tagsBtn').onclick = toggleTags;
+$('#helpBtn').onclick = () => $('#help').showModal();
+$('#demoBtn').onclick = () => loadFiles(makeDemoFiles());
+$('#fileInput').onchange = e => { loadFiles(e.target.files); e.target.value = ''; };
+$('#dirInput').onchange = e => { loadFiles(e.target.files); e.target.value = ''; };
+$('#tagFilter').addEventListener('input', () => renderTags(true));
+
+function toggleInvert() { if (!state.cur) return; state.invert = !state.invert; $('#invertBtn').classList.toggle('active', state.invert); state.dirty = true; scheduleDraw(); }
+function resetAll() {
+  if (!state.cur) return;
+  state.invert = false; $('#invertBtn').classList.remove('active');
+  state.measures.delete(curImg()); resetWindow(); fitView(); scheduleDraw();
+}
+function toggleTags() {
+  const p = $('#tags'); p.hidden = !p.hidden; $('#tagsBtn').classList.toggle('active', !p.hidden);
+  renderTags(true); if (state.autoFit) fitView(); scheduleDraw();
+}
+function exportPng() {
+  const img = curImg(); if (!img) return;
+  draw();
+  canvas.toBlob(b => {
+    const a = document.createElement('a'); a.href = URL.createObjectURL(b);
+    a.download = `${(img.info.seriesDesc || 'dicom').replace(/[^\w-]+/g, '_')}_${state.idx + 1}.png`;
+    a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 2000);
+  });
+}
+
+document.addEventListener('keydown', e => {
+  if (e.target.matches('input,select,textarea') || $('#help').open) return;
+  const k = e.key;
+  const actions = {
+    ArrowUp: () => setSlice(state.idx - 1), ArrowLeft: () => setSlice(state.idx - 1),
+    ArrowDown: () => setSlice(state.idx + 1), ArrowRight: () => setSlice(state.idx + 1),
+    PageUp: () => setSlice(state.idx - 10), PageDown: () => setSlice(state.idx + 10),
+    Home: () => setSlice(0), End: () => setSlice(Infinity),
+    w: () => setTool('window'), p: () => setTool('pan'), z: () => setTool('zoom'), m: () => setTool('measure'),
+    i: toggleInvert, r: resetAll, t: toggleTags, f: () => { fitView(); scheduleDraw(); },
+    Delete: () => { if (curImg()) { state.measures.delete(curImg()); scheduleDraw(); } },
+  };
+  const fn = actions[k] || actions[k.toLowerCase()];
+  if (fn && !e.ctrlKey && !e.metaKey && !e.altKey) { fn(); e.preventDefault(); }
+});
+
+// Trascina e rilascia (anche cartelle intere)
+['dragenter', 'dragover'].forEach(t => viewport.addEventListener(t, e => { e.preventDefault(); viewport.classList.add('drop'); }));
+viewport.addEventListener('dragleave', () => viewport.classList.remove('drop'));
+viewport.addEventListener('drop', async e => {
+  e.preventDefault(); viewport.classList.remove('drop');
+  const entries = [...e.dataTransfer.items].map(it => it.webkitGetAsEntry && it.webkitGetAsEntry()).filter(Boolean);
+  if (!entries.length) { loadFiles(e.dataTransfer.files); return; }
+  const out = [];
+  async function walk(entry) {
+    if (entry.isFile) out.push(await new Promise((res, rej) => entry.file(res, rej)));
+    else if (entry.isDirectory) {
+      const reader = entry.createReader(); let batch;
+      do { batch = await new Promise((res, rej) => reader.readEntries(res, rej)); for (const x of batch) await walk(x); } while (batch.length);
+    }
+  }
+  for (const en of entries) await walk(en);
+  loadFiles(out);
+});
+
+new ResizeObserver(() => { if (state.autoFit) fitView(); scheduleDraw(); }).observe(viewport);
+
+function setStatus(t, warn) { const s = $('#status'); s.textContent = t; s.style.color = warn ? 'var(--warn)' : ''; s.title = t; }
+
+// ============================================================
+//  Demo: genera una TC sintetica come veri file DICOM
+//  (Explicit VR Little Endian, 16 bit, Rescale Intercept -1024)
+// ============================================================
+function makeDemoFiles() {
+  const R = 256, C = 256, N = 60, ps = 1.2, th = 3;
+  const enc = new TextEncoder();
+  const concat = arrs => { const out = new Uint8Array(arrs.reduce((n, a) => n + a.length, 0)); let o = 0; for (const a of arrs) { out.set(a, o); o += a.length; } return out; };
+  function el(g, e, vr, val) {
+    let data;
+    if (typeof val === 'string') { if (val.length % 2) val += vr === 'UI' ? '\0' : ' '; data = enc.encode(val); }
+    else if (vr === 'US' || vr === 'UL') {
+      const sz = vr === 'US' ? 2 : 4; data = new Uint8Array(sz * val.length); const dv = new DataView(data.buffer);
+      val.forEach((v, i) => sz === 2 ? dv.setUint16(i * 2, v, true) : dv.setUint32(i * 4, v, true));
+    } else data = val;
+    const long = /^(OB|OW|OF|SQ|UT|UN)$/.test(vr);
+    const head = new Uint8Array(long ? 12 : 8), dv = new DataView(head.buffer);
+    dv.setUint16(0, g, true); dv.setUint16(2, e, true); head[4] = vr.charCodeAt(0); head[5] = vr.charCodeAt(1);
+    if (long) dv.setUint32(8, data.length, true); else dv.setUint16(6, data.length, true);
+    return concat([head, data]);
+  }
+  const now = new Date(), da = `${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, '0')}${String(now.getDate()).padStart(2, '0')}`;
+  const sopClass = '1.2.840.10008.5.1.4.1.1.2';
+  const studyUID = '2.25.314159265358979323846264338327', seriesUID = '2.25.271828182845904523536028747135', forUID = '2.25.161803398874989484820458683436';
+  let seed = 12345; const rnd = () => (seed = (Math.imul(seed, 1664525) + 1013904223) >>> 0) / 4294967296;
+  const files = [];
+  for (let k = 0; k < N; k++) {
+    const z = (N / 2 - k) * th;
+    const px = new Uint16Array(R * C);
+    for (let r = 0; r < R; r++) {
+      const y = (r - R / 2 + 0.5) * ps;
+      for (let c = 0; c < C; c++) {
+        const x = (c - C / 2 + 0.5) * ps;
+        let hu = -1000;
+        if (y > 118 && y < 126 && Math.abs(x) < 170) hu = 120;                       // lettino
+        const eb = (x / 140) ** 2 + (y / 100) ** 2;
+        if (eb < 1) {
+          hu = eb > 0.86 ? -90 : 40;                                                  // grasso / tessuti molli
+          if (z < -15 && ((x + 50) / 75) ** 2 + ((y + 5) / 62) ** 2 + ((z + 65) / 55) ** 2 < 1) hu = 60;   // fegato
+          for (const s of [-1, 1]) if (((x - s * 62) / 24) ** 2 + ((y - 48) / 30) ** 2 + ((z + 75) / 38) ** 2 < 1) hu = 150; // reni
+          for (const s of [-1, 1]) if (((x - s * 62) / 46) ** 2 + ((y + 2) / 62) ** 2 + ((z - 35) / 80) ** 2 < 1) hu = -850; // polmoni
+          if (((x - 18) / 46) ** 2 + ((y + 28) / 40) ** 2 + ((z - 15) / 45) ** 2 < 1) hu = 45;  // cuore
+          if ((x - 16) ** 2 + (y - 28) ** 2 < 144) hu = 220;                          // aorta
+          const dv = Math.hypot(x, y - 58); if (dv < 19) hu = dv > 15 ? 750 : 260;    // vertebra
+          const dc = Math.hypot(x, y - 86); if (dc < 8) hu = 15; else if (dc < 14 && y > 80) hu = 650; // canale e arco
+        }
+        hu += hu > -1000 ? (rnd() + rnd() - 1) * 18 : (rnd() - 0.5) * 6;
+        px[r * C + c] = Math.max(0, Math.round(hu + 1024));
+      }
+    }
+    const sop = `2.25.9000${k + 1}`;
+    const meta = concat([
+      el(2, 1, 'OB', new Uint8Array([0, 1])), el(2, 2, 'UI', sopClass), el(2, 3, 'UI', sop),
+      el(2, 0x10, 'UI', '1.2.840.10008.1.2.1'), el(2, 0x12, 'UI', '2.25.1')]);
+    const body = concat([
+      el(8, 8, 'CS', 'ORIGINAL\\PRIMARY\\AXIAL'), el(8, 0x16, 'UI', sopClass), el(8, 0x18, 'UI', sop),
+      el(8, 0x20, 'DA', da), el(8, 0x60, 'CS', 'CT'), el(8, 0x70, 'LO', 'Generatore demo'),
+      el(8, 0x1030, 'LO', 'Studio dimostrativo'), el(8, 0x103e, 'LO', 'Fantoccio torace-addome (sintetico)'),
+      el(0x10, 0x10, 'PN', 'ANONIMO^DEMO'), el(0x10, 0x20, 'LO', 'DEMO-0001'),
+      el(0x18, 0x50, 'DS', String(th)),
+      el(0x20, 0x0d, 'UI', studyUID), el(0x20, 0x0e, 'UI', seriesUID), el(0x20, 0x11, 'IS', '1'), el(0x20, 0x13, 'IS', String(k + 1)),
+      el(0x20, 0x32, 'DS', `${(-C / 2 * ps).toFixed(1)}\\${(-R / 2 * ps).toFixed(1)}\\${z}`),
+      el(0x20, 0x37, 'DS', '1\\0\\0\\0\\1\\0'), el(0x20, 0x52, 'UI', forUID), el(0x20, 0x1041, 'DS', String(z)),
+      el(0x28, 2, 'US', [1]), el(0x28, 4, 'CS', 'MONOCHROME2'), el(0x28, 0x10, 'US', [R]), el(0x28, 0x11, 'US', [C]),
+      el(0x28, 0x30, 'DS', `${ps}\\${ps}`), el(0x28, 0x100, 'US', [16]), el(0x28, 0x101, 'US', [12]),
+      el(0x28, 0x102, 'US', [11]), el(0x28, 0x103, 'US', [0]),
+      el(0x28, 0x1050, 'DS', '40'), el(0x28, 0x1051, 'DS', '400'), el(0x28, 0x1052, 'DS', '-1024'), el(0x28, 0x1053, 'DS', '1'),
+      el(0x7fe0, 0x10, 'OW', new Uint8Array(px.buffer))]);
+    const pre = new Uint8Array(132); pre.set(enc.encode('DICM'), 128);
+    const bytes = concat([pre, el(2, 0, 'UL', [meta.length]), meta, body]);
+    files.push(new File([bytes], `IMG${String(k + 1).padStart(4, '0')}.dcm`, { type: 'application/dicom' }));
+  }
+  for (let i = files.length - 1; i > 0; i--) { const j = Math.floor(rnd() * (i + 1)); [files[i], files[j]] = [files[j], files[i]]; } // ordine casuale: la lettura deve riordinarle
+  return files;
+}
+</script>
+</body>
+</html>
