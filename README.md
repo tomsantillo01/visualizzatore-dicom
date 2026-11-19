@@ -4,6 +4,12 @@ Un visualizzatore di immagini mediche DICOM (TC, RM, RX…) che funziona interam
 
 **Privacy:** i file dell'esame non vengono mai caricati su internet. Il browser li legge e li elabora direttamente sul computer di chi usa la pagina, e nessun server riceve le immagini.
 
+## Documentazione
+- 📘 [Manuale d'uso (PDF)](documenti/Manuale%20d'uso%20-%20Visualizzatore%20DICOM.pdf): istruzioni complete per computer e smartphone
+- 🔒 [Privacy e dati sanitari (PDF)](documenti/Privacy%20e%20dati%20sanitari%20-%20Visualizzatore%20DICOM.pdf): perché i dati restano sul dispositivo e come verificarlo
+
+I PDF sono anche nella finestra di aiuto (**?**) del visualizzatore.
+
 ## Come si apre
 - **Online**: con GitHub Pages attivo, all'indirizzo `https://<utente>.github.io/<nome-repository>/`.
 - **In locale**: doppio clic su `index.html` (Chrome, Edge o Firefox).
