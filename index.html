@@ -9,8 +9,9 @@
 <title>Visualizzatore DICOM</title>
 <script src="https://cdn.jsdelivr.net/npm/dicom-parser@1.8.21/dist/dicomParser.min.js"></script>
 <style>
-:root{--bg:#0e1013;--panel:#171a1f;--panel2:#1f242c;--line:#2b313b;--text:#e6e8eb;--muted:#98a2ae;--accent:#4aa3ff;--warn:#ffb454;--measure:#ffd84a}
+:root{--note:#ff9f1c;--bg:#0e1013;--panel:#171a1f;--panel2:#1f242c;--line:#2b313b;--text:#e6e8eb;--muted:#98a2ae;--accent:#4aa3ff;--warn:#ffb454;--measure:#ffd84a}
 *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+[hidden]{display:none!important}
 html,body{height:100%;margin:0}
 body{height:100dvh;background:var(--bg);color:var(--text);font:14px/1.4 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;display:flex;flex-direction:column;overflow:hidden;overscroll-behavior:none;
   padding:env(safe-area-inset-top) env(safe-area-inset-right) 0 env(safe-area-inset-left)}
@@ -42,11 +43,45 @@ main{flex:1;display:flex;min-height:0}
 #center{flex:1;display:flex;flex-direction:column;min-width:0}
 #viewport{position:relative;flex:1;min-height:0;background:#000;overflow:hidden}
 #viewport.drop{outline:2px dashed var(--accent);outline-offset:-8px}
-canvas#view{position:absolute;inset:0;width:100%;height:100%;touch-action:none;cursor:crosshair;-webkit-user-select:none;user-select:none}
+#grid{position:absolute;inset:0;display:grid;gap:2px;background:#232831}
+#grid.l1{grid-template:1fr/1fr}
+#grid.l2{grid-template:1fr/1fr 1fr}
+#grid.l4{grid-template:1fr 1fr/1fr 1fr}
+#grid.mpr{grid-template:"a b" 1fr "a c" 1fr/3fr 2fr}
+#grid.mpr .pane:nth-child(1){grid-area:a}#grid.mpr .pane:nth-child(2){grid-area:b}#grid.mpr .pane:nth-child(3){grid-area:c}
+.pane{position:relative;background:#000;overflow:hidden;min-width:0;min-height:0}
+.pane canvas{position:absolute;inset:0;width:100%;height:100%;touch-action:none;cursor:crosshair;-webkit-user-select:none;user-select:none}
+#grid:not(.l1) .pane.active::after{content:"";position:absolute;inset:0;border:2px solid var(--accent);pointer-events:none}
+.om{position:absolute;font:600 13px/1 system-ui,sans-serif;color:#f3d36b;text-shadow:0 0 3px #000,0 0 2px #000;pointer-events:none}
+.om.t{top:6px;left:50%;transform:translateX(-50%)}.om.b{bottom:6px;left:50%;transform:translateX(-50%)}
+.om.l{left:6px;top:50%;transform:translateY(-50%)}.om.r{right:6px;top:50%;transform:translateY(-50%)}
+#examChip{font-size:12px;color:var(--muted);border:1px solid var(--line);border-radius:999px;padding:3px 10px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:34vw;cursor:default}
+#examChip[hidden]{display:none}
+.series .vol{color:#bcd9ff;font-weight:700}
+#seriesPanel{overflow-x:hidden}
+.series{white-space:normal}
+.pane.tiny .om.b{bottom:24px}
+.notesHead{margin-top:16px}
+.notesHead h2 span{text-transform:none;letter-spacing:0}
+.noteItem{display:flex;gap:8px;width:100%;text-align:left;border:0;border-bottom:1px solid var(--line);border-radius:0;background:none;padding:8px 12px;align-items:flex-start;white-space:normal}
+.noteItem .nIdx{flex:none;width:20px;height:20px;border-radius:50%;background:var(--note);color:#1a1200;font-size:11px;font-weight:700;display:inline-flex;align-items:center;justify-content:center}
+.noteItem .nBody{min-width:0;display:block}
+.noteItem .nText{display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;word-break:break-word}
+.noteItem .sub{display:block;color:var(--muted);font-size:12px}
+.notesActions{display:flex;gap:6px;padding:8px 12px 0;flex-wrap:wrap}
+.notesActions button,.notesActions label.btn{padding:3px 9px;font-size:12px;min-height:0}
+.notesInfo{color:var(--muted);font-size:11px;margin:6px 12px 14px}
+#noteDlg{width:min(460px,calc(100% - 24px))}
+#noteText{width:100%;min-height:110px;resize:vertical;background:var(--panel2);color:var(--text);border:1px solid var(--line);border-radius:6px;padding:8px;font:inherit}
+.dlgBtns{display:flex;gap:8px;margin-top:12px;align-items:center}
+button.danger{color:#ff8a8a;border-color:#5a2a2a}
+button.primaryBtn{background:var(--accent);color:#06121f;border-color:var(--accent)}
+.muted{color:var(--muted);font-size:12px;margin:-6px 0 10px}
 .ov{position:absolute;font:12px/1.35 ui-monospace,Consolas,monospace;color:#eaeaea;text-shadow:0 0 3px #000,0 0 2px #000,0 0 1px #000;pointer-events:none;white-space:pre}
 .tl{top:8px;left:10px}.tr{top:8px;right:10px;text-align:right}.bl{bottom:8px;left:10px}.br{bottom:8px;right:10px;text-align:right}
-#msg,#empty,#loading{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);text-align:center;max-width:min(460px,90%)}
-#msg{color:var(--warn);background:rgba(20,20,20,.85);padding:12px 16px;border-radius:8px;pointer-events:none}
+.msg,#empty,#loading{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);text-align:center;max-width:min(460px,90%)}
+#loading{z-index:4}
+.msg{color:var(--warn);background:rgba(20,20,20,.85);padding:12px 16px;border-radius:8px;pointer-events:none}
 #empty{color:var(--muted);line-height:1.6;width:90%}
 #empty strong{color:var(--text);font-size:16px;display:block;margin-bottom:6px}
 #empty .privacy{font-size:12px;margin-top:10px}
@@ -104,6 +139,13 @@ dialog td:first-child{color:var(--accent);white-space:nowrap}
   .bar input[type=range]{height:30px}
   #playBtn{width:40px}
   #sliceLabel{min-width:52px}
+  #examChip{display:none}
+  .om{font-size:11px}
+  .notesActions button,.notesActions label.btn{padding:6px 10px;min-height:34px}
+}
+@media (max-width:700px) and (orientation:portrait){
+  #grid.l2{grid-template:1fr 1fr/1fr}
+  #grid.mpr{grid-template:"a a" 3fr "b c" 2fr/1fr 1fr}
 }
 </style>
 </head>
@@ -113,7 +155,8 @@ dialog td:first-child{color:var(--accent);white-space:nowrap}
   <h1><span class="long">Visualizzatore </span>DICOM</h1>
   <label class="btn" id="dirLabel" title="Apri una cartella con file DICOM"><span class="long">Apri </span>cartella<input type="file" id="dirInput" webkitdirectory multiple></label>
   <label class="btn primary" title="Apri file DICOM o un archivio .zip">Apri<span class="long"> file</span><input type="file" id="fileInput" multiple></label>
-  <button id="demoBtn" title="Genera una TC sintetica di prova">Demo</button>
+  <button id="demoBtn" title="Genera un esame sintetico di prova (TC + RX del torace)">Demo</button>
+  <span id="examChip" hidden></span>
   <span class="spacer"></span>
   <button id="tagsBtn" title="Mostra/nascondi i tag DICOM (T)">Tag<span class="long"> DICOM</span></button>
   <button id="helpBtn" title="Comandi" aria-label="Aiuto">?</button>
@@ -125,7 +168,16 @@ dialog td:first-child{color:var(--accent);white-space:nowrap}
     <button data-tool="pan" title="Sposta l'immagine (P)"><span class="ic">✥</span><span>Sposta</span></button>
     <button data-tool="zoom" title="Trascina su/giù per lo zoom (Z)"><span class="ic">⊕</span><span>Zoom</span></button>
     <button data-tool="measure" title="Misura una distanza in mm (M)"><span class="ic">⟷</span><span>Misura</span></button>
+    <button data-tool="note" title="Aggiungi una nota: tocca un punto dell'immagine (N)"><span class="ic">✎</span><span>Nota</span></button>
+    <button data-tool="cross" id="crossTool" title="MPR: tocca un punto per portare lì gli altri due piani (C)" disabled><span class="ic">✛</span><span>Incrocio</span></button>
   </div>
+  <select id="layout" title="Disposizione delle viste (tasti 0-4)" disabled>
+    <option value="auto">Vista automatica</option>
+    <option value="1">1 immagine</option>
+    <option value="2">2 affiancate</option>
+    <option value="4">Griglia 2×2</option>
+    <option value="mpr">MPR · 3 piani</option>
+  </select>
   <select id="preset" title="Preset di finestra" disabled></select>
   <button id="invertBtn" title="Inverti i livelli di grigio (I)" disabled><span class="ic">◑</span><span>Inverti</span></button>
   <button id="resetBtn" title="Ripristina finestra, zoom e misure (R)" disabled><span class="ic">↺</span><span>Reset</span></button>
@@ -135,16 +187,19 @@ dialog td:first-child{color:var(--accent);white-space:nowrap}
   <aside id="seriesPanel">
     <div class="panelHead"><h2>Serie</h2><button id="seriesClose" class="mobileOnly" aria-label="Chiudi">✕</button></div>
     <div id="seriesList"><p class="emptyList">Nessuna serie caricata.</p></div>
+    <div class="panelHead notesHead"><h2>Note <span id="notesCount"></span></h2><button id="notesToggle" title="Mostra o nascondi le note sulle immagini">Nascondi</button></div>
+    <div id="notesList"></div>
+    <div class="notesActions">
+      <button id="notesExport" title="Scarica le note in un file .json (copia di sicurezza o per un altro dispositivo)" disabled>Esporta</button>
+      <label class="btn" title="Carica le note da un file .json esportato">Importa<input type="file" id="notesImport" accept=".json,application/json"></label>
+      <button id="notesClear" title="Elimina le note di questo esame" disabled>Elimina</button>
+    </div>
+    <p class="notesInfo">Le note restano salvate solo in questo browser, su questo dispositivo.</p>
   </aside>
   <div id="backdrop"></div>
   <section id="center">
     <div id="viewport">
-      <canvas id="view"></canvas>
-      <div class="ov tl" id="ovTL"></div>
-      <div class="ov tr" id="ovTR"></div>
-      <div class="ov bl" id="ovBL"></div>
-      <div class="ov br" id="ovBR"></div>
-      <div id="msg" hidden></div>
+      <div id="grid" class="l1"></div>
       <div id="loading" hidden></div>
       <div id="toast" hidden></div>
       <div id="empty">
@@ -173,7 +228,8 @@ dialog td:first-child{color:var(--accent);white-space:nowrap}
   <h3>Comandi</h3>
   <h4>Touch (telefono e tablet)</h4>
   <table>
-    <tr><td>Un dito</td><td>Strumento attivo: Scorri, Finestra, Sposta, Zoom, Misura</td></tr>
+    <tr><td>Un dito</td><td>Strumento attivo: Scorri, Finestra, Sposta, Zoom, Misura, Nota, Incrocio</td></tr>
+    <tr><td>Tocco su una nota</td><td>La apre per modificarla o eliminarla; trascinandola la sposti</td></tr>
     <tr><td>Due dita</td><td>Allarga/stringi per lo zoom, trascina per spostare</td></tr>
     <tr><td>Doppio tocco</td><td>Adatta l'immagine allo schermo</td></tr>
     <tr><td>☰</td><td>Elenco delle serie dell'esame</td></tr>
@@ -189,14 +245,31 @@ dialog td:first-child{color:var(--accent);white-space:nowrap}
     <tr><td>Doppio clic</td><td>Adatta l'immagine alla finestra</td></tr>
     <tr><td>↑ ↓ / PagSu PagGiù</td><td>Immagine precedente/successiva (±1 / ±10)</td></tr>
     <tr><td>Home / Fine</td><td>Prima / ultima immagine</td></tr>
-    <tr><td>S W P Z M</td><td>Strumenti Scorri, Finestra, Sposta, Zoom, Misura</td></tr>
+    <tr><td>S W P Z M N C</td><td>Strumenti Scorri, Finestra, Sposta, Zoom, Misura, Nota, Incrocio</td></tr>
+    <tr><td>0 / 1 / 2 / 4 / 3</td><td>Vista automatica, 1 immagine, 2 affiancate, griglia 2×2, MPR</td></tr>
     <tr><td>Spazio</td><td>Riproduci / ferma</td></tr>
     <tr><td>I / R / F / T</td><td>Inverti, Reset, Adatta, Tag DICOM</td></tr>
     <tr><td>Canc</td><td>Cancella le misure dell'immagine corrente</td></tr>
   </table>
+  <h4>Viste multiple e note</h4>
+  <p style="font-size:13px;margin:4px 0">Con <b>Vista automatica</b> il programma riconosce l'esame: una TC o RM volumetrica si apre in <b>MPR</b> (assiale, coronale e sagittale, con le linee che mostrano dove passano gli altri piani), le radiografie mostrano le proiezioni affiancate (frontale, laterale…), le RM con serie su piani diversi le mettono in griglia. Tocca una vista per renderla attiva. Le <b>note</b> si salvano nel browser di questo dispositivo: usa «Esporta» nel pannello delle serie per farne una copia.</p>
   <p style="color:var(--muted);font-size:12px">Si possono aprire file DICOM singoli, cartelle intere o archivi .zip. Formati supportati: DICOM non compressi (Little/Big Endian) e compressi JPEG Baseline 8 bit, JPEG Lossless, JPEG-LS, JPEG 2000 e RLE; monocromatici e a colori, anche multi-frame. Non supportati: JPEG Extended a 12 bit, Deflate, video MPEG/H.264. I decodificatori vengono scaricati solo la prima volta che servono.<br>Strumento didattico: non usarlo per diagnosi.</p>
   <p style="font-size:13px">📘 <a href="documenti/Manuale%20d'uso%20-%20Visualizzatore%20DICOM.pdf" target="_blank" rel="noopener" style="color:var(--accent)">Manuale d'uso (PDF)</a> &nbsp;·&nbsp; 🔒 <a href="documenti/Privacy%20e%20dati%20sanitari%20-%20Visualizzatore%20DICOM.pdf" target="_blank" rel="noopener" style="color:var(--accent)">Privacy e dati sanitari (PDF)</a></p>
   <form method="dialog"><button>Chiudi</button></form>
+</dialog>
+
+<dialog id="noteDlg">
+  <form method="dialog">
+    <h3 id="noteTitle">Nuova nota</h3>
+    <div id="noteWhere" class="muted"></div>
+    <textarea id="noteText" rows="5" maxlength="2000" placeholder="Scrivi la nota…"></textarea>
+    <div class="dlgBtns">
+      <button type="button" id="noteDelete" class="danger">Elimina</button>
+      <span class="spacer"></span>
+      <button value="cancel" formnovalidate>Annulla</button>
+      <button value="save" class="primaryBtn">Salva</button>
+    </div>
+  </form>
 </dialog>
 
 <script>
@@ -306,16 +379,15 @@ function u16(ds, tag, def) { try { const v = ds.uint16(tag); return v === undefi
 //  Stato
 // ============================================================
 const state = {
-  series: [], cur: null, idx: 0,
-  wc: 40, ww: 400, sens: 1, invert: false,
-  tool: 'window',
-  view: { scale: 1, x: 0, y: 0 }, autoFit: true,
-  cursor: null, dirty: true,
-  measures: new Map(),
+  series: [], tool: 'window',
+  layout: 'auto', layoutUsed: '1',     // disposizione scelta (auto, 1, 2, 4, mpr) e quella effettiva
+  panes: [], active: null,             // viste sullo schermo e vista attiva
+  volCache: null,                      // volume 3D per l'MPR (uno solo, per risparmiare memoria)
+  keyIndex: new Map(),                 // chiave immagine -> { series, idx }, per le note
+  measures: new Map(), showNotes: true,
 };
-const canvas = $('#view'), ctx = canvas.getContext('2d');
-const off = document.createElement('canvas'), offCtx = off.getContext('2d');
 const viewport = $('#viewport');
+const isTouchUI = matchMedia('(pointer: coarse)').matches;
 
 // ============================================================
 //  Lettura dei file
@@ -366,6 +438,9 @@ function buildImages(ds, bytes, file) {
     patient: fmtName(str(ds, 'x00100010')), patientId: str(ds, 'x00100020'),
     studyDate: fmtDate(str(ds, 'x00080020')), studyDesc: str(ds, 'x00081030'),
     rescaleType: str(ds, 'x00281054'),
+    sop: str(ds, 'x00080018'), studyUID: str(ds, 'x0020000d'),
+    bodyPart: str(ds, 'x00180015'), viewPosition: str(ds, 'x00185101'),
+    laterality: str(ds, 'x00200062') || str(ds, 'x00200060'), patientOrientation: str(ds, 'x00200020'),
   };
   let error = null;
   const kind = pd.encapsulatedPixelData ? TS_KIND[ts] : (UNCOMPRESSED.has(ts) ? 'raw' : null);
@@ -464,10 +539,15 @@ async function loadFiles(fileList) {
   state.series = [...bySeries.values()];
   state.series.forEach(sortSeries);
   state.series.sort((a, b) => (parseInt(a.info.seriesNumber) || 0) - (parseInt(b.info.seriesNumber) || 0));
-  state.measures.clear(); decodedQueue.length = 0;
-  renderSeriesList();
-  selectSeries(0);
+  state.measures.clear(); decodedQueue.length = 0; state.volCache = null;
+  state.keyIndex = new Map();
+  state.series.forEach(s => s.images.forEach((m, i) => state.keyIndex.set(imgKey(m), { series: s, idx: i })));
+  state.panes.forEach(clearPane);
+  renderSeriesList(); renderNotesList();
   setStatus(`${images} immagini in ${state.series.length} serie` + (skipped ? ` · ${skipped} file ignorati` : ''));
+  // si parte dalla serie principale (la più numerosa) e si sceglie la vista adatta all'esame
+  const main = state.series.filter(usable).sort((a, b) => b.images.length - a.images.length)[0] || state.series[0];
+  await setLayout(state.layout, main);
 }
 
 // Ordina le fette lungo la normale al piano (posizione reale nel paziente),
@@ -586,6 +666,7 @@ async function decodeWasm(kind, bytes, I) {
 
 async function decodeImage(img) {
   const I = img.info;
+  if (img.kind === 'mpr') { img.planar = 0; img.photometric = I.photometric; return extractPlane(img); }
   let r;
   if (img.kind === 'raw') r = decodeUncompressed(img);
   else {
@@ -626,22 +707,22 @@ const decodedQueue = [];
 function rememberDecoded(img) {
   decodedQueue.push(img);
   if (decodedQueue.length <= MAX_DECODED) return;
-  const near = new Set(state.cur ? state.cur.images.slice(Math.max(0, state.idx - 8), state.idx + 9) : []);
+  const near = new Set();          // le immagini vicine a quelle mostrate restano in memoria
+  for (const p of state.panes) p.images.slice(Math.max(0, p.idx - 8), p.idx + 9).forEach(m => near.add(m));
   for (let i = 0; i < decodedQueue.length && decodedQueue.length > MAX_DECODED; i++) {
     const m = decodedQueue[i];
     if (!near.has(m)) { m.raw = null; decodedQueue.splice(i--, 1); }
   }
 }
 
-// Pre-decodifica le fette vicine per uno scorrimento fluido
-let prefetchTimer = null;
-function prefetchAround() {
-  clearTimeout(prefetchTimer);
-  prefetchTimer = setTimeout(async () => {
-    const s = state.cur; if (!s) return;
+// Pre-decodifica le immagini vicine a quella mostrata in ogni vista
+function prefetchAround(p) {
+  clearTimeout(p.prefetchTimer);
+  p.prefetchTimer = setTimeout(async () => {
+    const imgs = p.images, idx = p.idx;
     for (const d of [1, -1, 2, -2, 3, -3]) {
-      const m = s.images[state.idx + d];
-      if (m && !m.raw && !m.error) { await prepare(m); if (s !== state.cur) return; }
+      const m = imgs[idx + d];
+      if (m && !m.raw && !m.error) { await prepare(m); if (p.images !== imgs) return; }
     }
   }, 30);
 }
@@ -657,13 +738,13 @@ function getStats(img) {
 
 const isColor = img => img.info.spp === 3;
 
-function renderOffscreen(img) {
-  const I = img.info, raw = getRaw(img);
+function renderOffscreen(p, img) {
+  const I = img.info, raw = getRaw(img), off = p.off;
   if (off.width !== I.cols || off.height !== I.rows) { off.width = I.cols; off.height = I.rows; }
-  const id = offCtx.createImageData(I.cols, I.rows), d = id.data;
+  const id = p.offCtx.createImageData(I.cols, I.rows), d = id.data;
   if (!isColor(img)) {
-    const ww = Math.max(1, state.ww), lo = state.wc - ww / 2, k = 255 / ww;
-    const inv = (img.photometric === 'MONOCHROME1') !== state.invert;
+    const ww = Math.max(1, p.ww), lo = p.wc - ww / 2, k = 255 / ww;
+    const inv = (img.photometric === 'MONOCHROME1') !== p.invert;
     const s = I.slope, b = I.intercept;
     for (let i = 0, j = 0; i < raw.length; i++, j += 4) {
       let g = ((raw[i] * s + b) - lo) * k;
@@ -675,82 +756,432 @@ function renderOffscreen(img) {
     const n = I.rows * I.cols, ycc = img.photometric.startsWith('YBR');
     // colori a 16/32 bit: riporta i valori su 8 bit
     const bits = raw.BYTES_PER_ELEMENT > 1 ? (I.bitsStored || raw.BYTES_PER_ELEMENT * 8) : 8, sh = Math.max(0, bits - 8);
-    for (let p = 0; p < n; p++) {
+    for (let q = 0; q < n; q++) {
       let r, g, b;
-      if (img.planar) { r = raw[p]; g = raw[p + n]; b = raw[p + 2 * n]; }
-      else { r = raw[3 * p]; g = raw[3 * p + 1]; b = raw[3 * p + 2]; }
+      if (img.planar) { r = raw[q]; g = raw[q + n]; b = raw[q + 2 * n]; }
+      else { r = raw[3 * q]; g = raw[3 * q + 1]; b = raw[3 * q + 2]; }
       if (sh) { r = r / 2 ** sh; g = g / 2 ** sh; b = b / 2 ** sh; }
       if (ycc) { const y = r, cb = g - 128, cr = b - 128; r = y + 1.402 * cr; g = y - 0.344136 * cb - 0.714136 * cr; b = y + 1.772 * cb; }
-      if (state.invert) { r = 255 - r; g = 255 - g; b = 255 - b; }
-      const j = 4 * p; d[j] = r; d[j + 1] = g; d[j + 2] = b; d[j + 3] = 255;
+      if (p.invert) { r = 255 - r; g = 255 - g; b = 255 - b; }
+      const j = 4 * q; d[j] = r; d[j + 1] = g; d[j + 2] = b; d[j + 3] = 255;
     }
   }
-  offCtx.putImageData(id, 0, 0);
+  p.offCtx.putImageData(id, 0, 0);
+}
+
+// ============================================================
+//  Riconoscimento del tipo di esame e delle proiezioni
+// ============================================================
+const MOD_NAMES = { CT: 'TC', MR: 'RM', CR: 'RX', DX: 'RX', DR: 'RX', RG: 'RX', MG: 'Mammografia', US: 'Ecografia', XA: 'Angiografia',
+  RF: 'Fluoroscopia', PT: 'PET', NM: 'Scintigrafia', IO: 'RX endorale', PX: 'Ortopanoramica', OT: 'Altro', SC: 'Immagine acquisita',
+  ES: 'Endoscopia', XC: 'Fotografia', OP: 'Fotografia oculare' };
+const XRAY = new Set(['CR', 'DX', 'DR', 'RG', 'MG', 'IO', 'PX']);          // radiografie: ogni immagine è una proiezione
+const BODY = { CHEST: 'torace', THORAX: 'torace', ABDOMEN: 'addome', PELVIS: 'bacino', ABDOMENPELVIS: 'addome-pelvi', CHESTABDOMEN: 'torace-addome',
+  CHESTABDPELVIS: 'torace-addome-pelvi', HEAD: 'cranio', SKULL: 'cranio', BRAIN: 'encefalo', HEADNECK: 'testa-collo', NECK: 'collo', SPINE: 'colonna',
+  CSPINE: 'rachide cervicale', TSPINE: 'rachide dorsale', LSPINE: 'rachide lombare', SSPINE: 'sacro', SHOULDER: 'spalla', ELBOW: 'gomito',
+  WRIST: 'polso', HAND: 'mano', HIP: 'anca', KNEE: 'ginocchio', ANKLE: 'caviglia', FOOT: 'piede', LEG: 'gamba', ARM: 'braccio', BREAST: 'mammella',
+  HEART: 'cuore', EXTREMITY: 'arto', SINUS: 'seni paranasali', JAW: 'mandibola', WHOLEBODY: 'corpo intero', TEETH: 'denti' };
+const PLANE_COLORS = { Assiale: '#4aa3ff', Coronale: '#3ddc84', Sagittale: '#ff8a5c' };
+const PLANE_ORDER = ['Assiale', 'Coronale', 'Sagittale', 'Obliqua'];
+const KIND_NAMES = { '1': '1 immagine', '2': '2 affiancate', '4': 'griglia 2×2', mpr: 'MPR 3 piani' };
+
+const cross3 = (a, b) => [a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a[0] * b[1] - a[1] * b[0]];
+const neg = a => a.map(v => -v);
+const dominant = v => { let d = 0; for (let i = 1; i < 3; i++) if (Math.abs(v[i]) > Math.abs(v[d])) d = i; return d; };
+const fmtMM = v => String(+v.toFixed(2));
+
+function planeName(normal) {
+  const d = dominant(normal);
+  return Math.abs(normal[d]) < 0.8 ? 'Obliqua' : ['Sagittale', 'Coronale', 'Assiale'][d];
+}
+// Piano di acquisizione di una serie tomografica, dall'orientamento di righe e colonne
+function seriesPlane(I) { return I.iop && I.iop.length === 6 ? planeName(cross3(I.iop.slice(0, 3), I.iop.slice(3))) : ''; }
+
+// Proiezione di una radiografia: View Position, lateralità, Patient Orientation o descrizione
+function projectionView(I) {
+  const vp = (I.viewPosition || '').toUpperCase().replace(/\s+/g, '');
+  const side = (I.laterality || '').toUpperCase().charAt(0);
+  const sx = side === 'R' ? ' destra' : side === 'L' ? ' sinistra' : '';
+  let kind = 'other', label = '';
+  if (/^(PA|AP)/.test(vp)) { kind = 'front'; label = `Frontale (${vp.slice(0, 2)})`; }
+  else if (/^(LL|RL|LAT|LATERAL|LLAT|RLAT|LLD|RLD)$/.test(vp)) { kind = 'lat'; label = `Laterale (${vp})`; }
+  else if (/^X?CC/.test(vp)) { kind = 'cc'; label = 'Cranio-caudale' + sx; }
+  else if (vp === 'MLO') { kind = 'mlo'; label = 'Obliqua medio-laterale' + sx; }
+  else if (vp === 'ML' || vp === 'LM' || vp === 'LMO') { kind = 'ml'; label = `Laterale (${vp})` + sx; }
+  else if (/OBL|LAO|RAO|LPO|RPO/.test(vp)) { kind = 'obl'; label = `Obliqua (${vp})` + sx; }
+  else {
+    const po = ((I.patientOrientation || '').toUpperCase().split('\\')[0] || '').trim();
+    const d = ` ${I.seriesDesc || ''} `.toUpperCase();
+    if (/^[LR]/.test(po) || /\b(PA|AP|FRONTALE?)\b/.test(d)) { kind = 'front'; label = 'Frontale'; }
+    else if (/^[AP]/.test(po) || /\b(LAT|LATERALE|LL)\b/.test(d)) { kind = 'lat'; label = 'Laterale'; }
+    else label = (vp + sx).trim();
+  }
+  return { kind, label, side };
+}
+
+function bodyName(I) { const b = (I.bodyPart || '').toUpperCase().replace(/[^A-Z]/g, ''); return BODY[b] || (I.bodyPart || '').toLowerCase(); }
+function examName(I) { const b = bodyName(I); return (MOD_NAMES[I.modality] || I.modality) + (b ? ' ' + b : ''); }
+const usable = s => !s.images.every(m => m.error);
+const sameStudy = (a, b) => !a.info.studyUID || !b.info.studyUID || a.info.studyUID === b.info.studyUID;
+
+// Una serie è un volume se le fette sono parallele, della stessa misura ed equidistanti
+function volumeInfo(s) {
+  if (s.volInfo !== undefined) return s.volInfo;
+  const imgs = s.images, a = imgs[0].info;
+  let r = null;
+  if (imgs.length >= 3 && a.iop && a.iop.length === 6 && a.spacing) {
+    const ok = imgs.every(m => !m.error && m.info.spp === 1 && m.info.rows === a.rows && m.info.cols === a.cols && m.pos !== undefined &&
+      m.info.iop && m.info.iop.every((v, i) => Math.abs(v - a.iop[i]) < 1e-3));
+    if (ok) {
+      const d = [];
+      for (let i = 0; i + 1 < imgs.length; i++) d.push(Math.abs(imgs[i].pos - imgs[i + 1].pos));
+      const mn = Math.min(...d), mx = Math.max(...d);
+      if (mn > 1e-3 && mx / mn < 1.6) r = { dz: Math.abs(imgs[0].pos - imgs[imgs.length - 1].pos) / (imgs.length - 1) };
+    }
+  }
+  return s.volInfo = r;
+}
+
+// Sceglie la disposizione più adatta all'esame
+function planFor(s) {
+  const I = s.info, N = s.images.length, desc = examName(I);
+  if (XRAY.has(I.modality)) {
+    const views = [];
+    for (const x of state.series) if (XRAY.has(x.info.modality) && sameStudy(x, s) && usable(x))
+      x.images.forEach((m, i) => { if (!m.error && m.info.frames === 1) views.push({ series: x, idx: i, view: projectionView(m.info) }); });
+    if (views.length >= 2) {
+      const ORDER = { front: 0, cc: 0, lat: 1, mlo: 1, ml: 2, obl: 3, other: 4 };
+      const sideOrd = v => v.view.side === 'R' ? 0 : v.view.side === 'L' ? 2 : 1;
+      views.sort((a, b) => ORDER[a.view.kind] - ORDER[b.view.kind] || sideOrd(a) - sideOrd(b));
+      const pick = views.slice(0, 4);
+      if (!pick.some(v => v.series === s)) pick[pick.length - 1] = views.find(v => v.series === s);
+      return { kind: pick.length > 2 ? '4' : '2', assign: pick, desc,
+        why: `${views.length} proiezioni (${pick.map(v => v.view.label || 'immagine').join(', ')}) affiancate` };
+    }
+  }
+  const vi = volumeInfo(s);
+  if (vi && N >= 20 && ['CT', 'PT', 'NM', 'MR'].includes(I.modality)) {
+    const inPlane = Math.min(I.spacing[0], I.spacing[1]);
+    if (I.modality !== 'MR' || vi.dz <= Math.max(2, 2.5 * inPlane))
+      return { kind: 'mpr', desc, why: `volume di ${N} fette (${fmtMM(I.spacing[1])}×${fmtMM(I.spacing[0])}×${fmtMM(vi.dz)} mm): viste assiale, coronale e sagittale` };
+  }
+  if (['CT', 'MR', 'PT'].includes(I.modality)) {
+    const byPlane = new Map(), sp = seriesPlane(I);
+    if (sp) byPlane.set(sp, s);
+    for (const x of state.series) {
+      if (x === s || x.info.modality !== I.modality || !sameStudy(x, s) || !usable(x) || x.images.length < 3) continue;
+      const pl = seriesPlane(x.info); if (!pl || pl === 'Obliqua') continue;
+      const cur = byPlane.get(pl);
+      if (!cur || (cur !== s && x.images.length > cur.images.length)) byPlane.set(pl, x);
+    }
+    if (sp && byPlane.size >= 2) {
+      const list = [...byPlane.entries()].sort((a, b) => a[1] === s ? -1 : b[1] === s ? 1 : PLANE_ORDER.indexOf(a[0]) - PLANE_ORDER.indexOf(b[0])).slice(0, 4);
+      return { kind: list.length > 2 ? '4' : '2', assign: list.map(e => ({ series: e[1] })), desc,
+        why: `serie acquisite su ${list.length} piani (${list.map(e => e[0].toLowerCase()).join(', ')}) affiancate` };
+    }
+  }
+  return { kind: '1', assign: [{ series: s }], desc, why: '' };
+}
+
+// ============================================================
+//  MPR: volume 3D e ricostruzioni sui tre piani
+// ============================================================
+const AX_NEXT = { k: ['i', 'j'], j: ['i', 'k'], i: ['j', 'k'] };   // asse orizzontale e verticale di ogni piano
+
+async function buildVolume(s, vi, onProgress) {
+  const imgs = s.images, I0 = imgs[0].info, nx0 = I0.cols, ny0 = I0.rows, nz = imgs.length;
+  const intOK = imgs.every(m => Number.isInteger(m.info.slope) && Number.isInteger(m.info.intercept) && m.info.bitsAllocated <= 16);
+  const T = intOK ? Int16Array : Float32Array;
+  // limite di memoria: sui telefoni il volume viene ridotto (1 pixel ogni f)
+  const budget = isTouchUI || (navigator.deviceMemory || 8) <= 4 ? 64e6 : 320e6;
+  let f = 1;
+  while (Math.floor(nx0 / f) * Math.floor(ny0 / f) * nz * T.BYTES_PER_ELEMENT > budget) f++;
+  const nx = Math.floor(nx0 / f), ny = Math.floor(ny0 / f);
+  const data = new T(nx * ny * nz);
+  let bad = 0, t0 = performance.now();
+  for (let k = 0; k < nz; k++) {
+    if (performance.now() - t0 > 50) { onProgress(k, nz); await new Promise(r => setTimeout(r)); t0 = performance.now(); }
+    const m = imgs[k]; await prepare(m);
+    if (!m.raw) { bad++; continue; }
+    const raw = m.raw, sl = m.info.slope, ic = m.info.intercept, base = k * nx * ny;
+    for (let y = 0; y < ny; y++) {
+      const src = y * f * nx0, dst = base + y * nx;
+      for (let x = 0; x < nx; x++) {
+        const v = raw[src + x * f] * sl + ic;
+        data[dst + x] = intOK ? (v > 32767 ? 32767 : v < -32768 ? -32768 : v) : v;
+      }
+    }
+  }
+  if (bad > nz / 10) throw new Error(`${bad} immagini su ${nz} non leggibili`);
+  const p0 = imgs[0].info.ipp, p1 = imgs[nz - 1].info.ipp;
+  let sd = [p1[0] - p0[0], p1[1] - p0[1], p1[2] - p0[2]];
+  const L = Math.hypot(...sd) || 1; sd = sd.map(v => v / L);
+  const vol = { series: s, info: I0, f, nx, ny, nz, data,
+    n: { i: nx, j: ny, k: nz }, dir: { i: I0.iop.slice(0, 3), j: I0.iop.slice(3, 6), k: sd },
+    sp: { i: I0.spacing[1] * f, j: I0.spacing[0] * f, k: vi.dz }, pl: {}, planes: {} };
+  for (const a of ['i', 'j', 'k']) {
+    const [xa, ya] = AX_NEXT[a];
+    let h = vol.dir[xa], v = vol.dir[ya], fx = false, fy = false;
+    if (a !== 'k') {      // ricostruzioni: testa in alto, destra del paziente a sinistra, anteriore a sinistra
+      const dh = dominant(h); if (h[dh] < 0) { fx = true; h = neg(h); }
+      const dv = dominant(v); if (dv === 2 ? v[dv] > 0 : v[dv] < 0) { fy = true; v = neg(v); }
+    }
+    const pl = { axis: a, xa, ya, fx, fy, W: vol.n[xa], H: vol.n[ya], name: planeName(vol.dir[a]) };
+    vol.pl[a] = pl;
+    const info = { ...I0, rows: pl.H, cols: pl.W, spacing: [vol.sp[ya], vol.sp[xa]], slope: 1, intercept: 0, spp: 1,
+      bitsAllocated: 16, bitsStored: 16, pixelRep: 1, frames: 1, ipp: null, iop: null,
+      thickness: a === 'k' ? I0.thickness : vol.sp[a], planeName: pl.name, orient: { h, v } };
+    const mid = imgs[Math.floor(nz / 2)];
+    vol.planes[a] = Array.from({ length: vol.n[a] }, (_, index) => {
+      const src = a === 'k' ? imgs[index] : mid;
+      return { kind: 'mpr', mpr: { vol, pl, index }, info, ds: src.ds, file: src.file, frame: 0, error: null };
+    });
+  }
+  return vol;
+}
+
+// Estrae dal volume l'immagine di un piano (con gli eventuali ribaltamenti)
+function extractPlane(img) {
+  const { vol, pl, index } = img.mpr, { nx, ny, data } = vol, W = pl.W, H = pl.H;
+  const stride = { i: 1, j: nx, k: nx * ny }, sx = stride[pl.xa], sy = stride[pl.ya];
+  const out = new data.constructor(W * H), base = index * stride[pl.axis];
+  for (let y = 0; y < H; y++) {
+    const row = base + (pl.fy ? H - 1 - y : y) * sy;
+    for (let x = 0; x < W; x++) out[y * W + x] = data[row + (pl.fx ? W - 1 - x : x) * sx];
+  }
+  return out;
+}
+// Pixel (x, y) del piano -> indici (i, j, k) del volume
+function planeToVol(pl, x, y, index) {
+  const o = { [pl.axis]: index };
+  o[pl.xa] = pl.fx ? pl.W - 1 - x : x;
+  o[pl.ya] = pl.fy ? pl.H - 1 - y : y;
+  return o;
+}
+
+async function getVolume(s) {
+  if (state.volCache && state.volCache.series === s) return state.volCache;
+  const vi = volumeInfo(s); if (!vi) return null;
+  state.volCache = null;                         // libera il volume precedente
+  const loading = $('#loading'); loading.textContent = 'Preparazione MPR…'; loading.hidden = false;
+  try {
+    const v = await buildVolume(s, vi, (k, n) => loading.textContent = `Preparazione MPR ${k} / ${n}…`);
+    state.volCache = v; return v;
+  } catch (e) {
+    setStatus('MPR non disponibile: ' + (e instanceof RangeError ? 'memoria insufficiente' : e.message), true); return null;
+  } finally { loading.hidden = true; }
+}
+
+// ============================================================
+//  Viste (riquadri): ognuna ha immagine, finestra, zoom propri
+// ============================================================
+class Pane {
+  constructor() {
+    const el = this.el = document.createElement('div'); el.className = 'pane';
+    el.innerHTML = '<canvas></canvas><div class="ov tl"></div><div class="ov tr"></div><div class="ov bl"></div><div class="ov br"></div>' +
+      '<div class="om t"></div><div class="om b"></div><div class="om l"></div><div class="om r"></div><div class="msg" hidden></div>';
+    this.canvas = el.querySelector('canvas'); this.ctx = this.canvas.getContext('2d');
+    this.ov = { tl: el.querySelector('.tl'), tr: el.querySelector('.tr'), bl: el.querySelector('.bl'), br: el.querySelector('.br') };
+    this.om = { t: el.querySelector('.om.t'), b: el.querySelector('.om.b'), l: el.querySelector('.om.l'), r: el.querySelector('.om.r') };
+    this.msg = el.querySelector('.msg');
+    this.off = document.createElement('canvas'); this.offCtx = this.off.getContext('2d');
+    this.series = null; this.vol = null; this.axis = null; this.idx = 0; this.token = 0;
+    this.wc = 40; this.ww = 400; this.sens = 1; this.invert = false; this.preset = 'file';
+    this.view = { scale: 1, x: 0, y: 0 }; this.autoFit = true; this.dirty = true; this.offImg = null; this.cursor = null;
+    this.pointers = new Map(); this.drag = null; this.pinch = null; this.gestureLock = false; this.lastTap = null; this.noteHits = [];
+    attachPaneEvents(this);
+  }
+  get images() { return this.vol ? this.vol.planes[this.axis] : this.series ? this.series.images : []; }
+  get img() { return this.images[this.idx] || null; }
+  size() { const r = this.el.getBoundingClientRect(); return { w: r.width, h: r.height }; }
+}
+
+const grid = $('#grid');
+const curImg = () => state.active ? state.active.img : null;
+const activeSeries = () => state.active ? state.active.series : null;
+const linked = p => p.vol ? state.panes.filter(q => q.vol === p.vol) : [p];   // le viste MPR condividono la finestra
+
+function mountPanes(n, cls) {
+  while (state.panes.length < n) state.panes.push(new Pane());
+  state.panes.splice(n).forEach(p => { clearTimeout(p.prefetchTimer); p.el.remove(); });
+  grid.className = cls;
+  state.panes.forEach(p => grid.appendChild(p.el));
+  if (!state.panes.includes(state.active)) state.active = state.panes[0];
+}
+function resetPane(p) {
+  p.token++; p.invert = false; p.dirty = true; p.offImg = null; p.drag = null; p.pinch = null; p.preset = 'file';
+}
+function showSeries(p, s, idx) {
+  resetPane(p); p.vol = null; p.axis = null; p.series = s;
+  const N = s.images.length, film = N > 1 && s.images.every(m => m.file === s.images[0].file);   // filmato multi-frame
+  p.idx = clamp(idx ?? (film ? 0 : Math.floor((N - 1) / 2)), 0, N - 1);
+  fitView(p); applyPreset(p, 'file');
+}
+function showVolume(p, vol, axis) {
+  resetPane(p); p.vol = vol; p.axis = axis; p.series = vol.series;
+  p.idx = Math.floor((vol.n[axis] - 1) / 2);
+  fitView(p);
+}
+function clearPane(p) { resetPane(p); p.series = null; p.vol = null; p.axis = null; p.idx = 0; }
+
+// Riempie una griglia: prima la serie scelta, poi le altre serie o le altre proiezioni
+function fillAssign(s, n) {
+  const a = state.active && state.active.series === s && !state.active.vol ? state.active.idx : undefined;
+  const out = [{ series: s, idx: a }];
+  if (XRAY.has(s.info.modality) || s.images.length <= 4) {
+    out[0].idx = a ?? 0;
+    for (let i = 0; i < s.images.length && out.length < n; i++) if (i !== out[0].idx) out.push({ series: s, idx: i });
+  }
+  for (const x of state.series) if (out.length < n && x !== s && usable(x)) out.push({ series: x });
+  while (out.length < n) out.push({ series: s, idx: out[0].idx });   // stessa serie: utile per confrontare finestre diverse
+  return out;
+}
+
+let layoutToken = 0;
+// mode: 'auto' | '1' | '2' | '4' | 'mpr'. kind forza la disposizione senza cambiare la scelta dell'utente
+async function setLayout(mode, s, kind) {
+  s = s || activeSeries() || state.series[0];
+  if (!kind) state.layout = mode;
+  if (!s) { syncControls(); return; }
+  const token = ++layoutToken;
+  togglePlay(false);
+  const plan = planFor(s);
+  if (kind) plan.kind = kind;
+  else if (mode === 'mpr') {
+    if (volumeInfo(s)) plan.kind = 'mpr';
+    else { setStatus('MPR non disponibile per questa serie: servono fette parallele ed equidistanti (TC o RM volumetrica).', true); plan.kind = '1'; state.layout = '1'; }
+  } else if (mode !== 'auto') { plan.kind = mode; plan.assign = fillAssign(s, +mode); }
+  let vol = null;
+  if (plan.kind === 'mpr') {
+    vol = await getVolume(s);
+    if (token !== layoutToken) return;
+    if (!vol) { plan.kind = '1'; if (state.layout === 'mpr') state.layout = '1'; }
+  }
+  if (plan.kind !== 'mpr' && (!plan.assign || plan.kind === '1')) plan.assign = [{ series: s }];
+  state.layoutUsed = plan.kind;
+  if (vol) {
+    mountPanes(3, 'mpr');
+    const axes = ['k', 'j', 'i'].sort((a, b) => PLANE_ORDER.indexOf(vol.pl[a].name) - PLANE_ORDER.indexOf(vol.pl[b].name));
+    axes.forEach((a, i) => showVolume(state.panes[i], vol, a));
+    applyPreset(state.panes[0], 'file');
+  } else {
+    const n = +plan.kind;
+    mountPanes(n, 'l' + n);
+    state.panes.forEach((p, i) => plan.assign[i] ? showSeries(p, plan.assign[i].series, plan.assign[i].idx) : clearPane(p));
+  }
+  state.active = null; setActive(state.panes[0]);
+  const chip = $('#examChip');
+  chip.textContent = `${plan.desc} · ${KIND_NAMES[plan.kind]}`; chip.title = plan.why || plan.desc; chip.hidden = false;
+  if (mode === 'auto' && !kind && plan.why) setStatus(`${plan.desc}: ${plan.why}`);
+  scheduleDraw();
+}
+
+function setActive(p) {
+  if (state.active !== p) togglePlay(false);
+  state.active = p;
+  state.panes.forEach(q => q.el.classList.toggle('active', q === p));
+  syncControls();
+}
+
+// Aggiorna barra, cursore e pulsanti in base alla vista attiva
+function syncControls() {
+  const p = state.active, N = p ? p.images.length : 0, has = !!(p && p.img);
+  const slider = $('#slider'); slider.max = Math.max(0, N - 1); slider.value = p ? p.idx : 0; slider.disabled = N < 2;
+  $('#playBtn').disabled = N < 2;
+  updateSliceLabel();
+  ['#invertBtn', '#resetBtn', '#exportBtn'].forEach(s => $(s).disabled = !has);
+  $('#invertBtn').classList.toggle('active', !!(p && p.invert));
+  buildPresets(p);
+  const i = p && p.series ? state.series.indexOf(p.series) : -1;
+  document.querySelectorAll('.series').forEach((b, k) => b.classList.toggle('active', k === i));
+  const lay = $('#layout'); lay.disabled = !state.series.length; lay.value = state.layout;
+  lay.options[0].textContent = state.layout === 'auto' && state.series.length ? `Auto · ${KIND_NAMES[state.layoutUsed]}` : 'Vista automatica';
+  const mpr = state.layoutUsed === 'mpr';
+  $('#crossTool').disabled = !mpr;
+  if (!mpr && state.tool === 'cross') setTool(isTouchUI ? 'scroll' : 'window');
+  renderTags();
 }
 
 // ============================================================
 //  Geometria della vista
 // ============================================================
-const curImg = () => state.cur ? state.cur.images[state.idx] : null;
 function aspect(img) {
   const sp = img.info.spacing; if (!sp) return { sx: 1, sy: 1 };
   const m = Math.min(sp[0], sp[1]); return { sx: sp[1] / m, sy: sp[0] / m };
 }
-function viewSize() { const r = viewport.getBoundingClientRect(); return { w: r.width, h: r.height }; }
-function fitView() {
-  const img = curImg(); if (!img) return;
-  const { w, h } = viewSize(), { sx, sy } = aspect(img);
+function fitView(p) {
+  const img = p.img; if (!img) return;
+  const { w, h } = p.size(), { sx, sy } = aspect(img);
   const iw = img.info.cols * sx, ih = img.info.rows * sy;
   const s = Math.min(w / iw, h / ih) * 0.96;
-  state.view = { scale: s, x: (w - iw * s) / 2, y: (h - ih * s) / 2 };
-  state.autoFit = true;
+  p.view = { scale: s, x: (w - iw * s) / 2, y: (h - ih * s) / 2 };
+  p.autoFit = true;
 }
-function toImage(px, py) {
-  const img = curImg(), { sx, sy } = aspect(img), v = state.view;
+function toImage(p, px, py) {
+  const { sx, sy } = aspect(p.img), v = p.view;
   return { x: (px - v.x) / (v.scale * sx), y: (py - v.y) / (v.scale * sy) };
 }
-function toScreen(p) {
-  const img = curImg(), { sx, sy } = aspect(img), v = state.view;
-  return { x: v.x + p.x * v.scale * sx, y: v.y + p.y * v.scale * sy };
+function toScreen(p, pt) {
+  const { sx, sy } = aspect(p.img), v = p.view;
+  return { x: v.x + pt.x * v.scale * sx, y: v.y + pt.y * v.scale * sy };
 }
-function zoomAt(factor, px, py) {
-  const v = state.view, ns = clamp(v.scale * factor, 0.05, 50), f = ns / v.scale;
+function zoomAt(p, factor, px, py) {
+  const v = p.view, ns = clamp(v.scale * factor, 0.05, 50), f = ns / v.scale;
   v.x = px - (px - v.x) * f; v.y = py - (py - v.y) * f; v.scale = ns;
-  state.autoFit = false; scheduleDraw();
+  p.autoFit = false; scheduleDraw();
 }
 
 // ============================================================
 //  Disegno
 // ============================================================
 let rafPending = false;
-function scheduleDraw() { if (!rafPending) { rafPending = true; requestAnimationFrame(() => { rafPending = false; draw(); }); } }
+function scheduleDraw() { if (!rafPending) { rafPending = true; requestAnimationFrame(() => { rafPending = false; state.panes.forEach(drawPane); }); } }
 
-function draw() {
-  const dpr = window.devicePixelRatio || 1, { w, h } = viewSize();
+function drawPane(p) {
+  const dpr = window.devicePixelRatio || 1, { w, h } = p.size(), ctx = p.ctx;
   const W = Math.max(1, Math.round(w * dpr)), H = Math.max(1, Math.round(h * dpr));
-  if (canvas.width !== W || canvas.height !== H) { canvas.width = W; canvas.height = H; }
+  if (p.canvas.width !== W || p.canvas.height !== H) { p.canvas.width = W; p.canvas.height = H; }
   ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
   ctx.fillStyle = '#000'; ctx.fillRect(0, 0, w, h);
-  const img = curImg(), msg = $('#msg');
-  if (!img) { msg.hidden = true; updateOverlays(null); return; }
-  if (img.error) { msg.textContent = img.error; msg.hidden = false; updateOverlays(img); return; }
+  const img = p.img, msg = p.msg;
+  p.noteHits = [];
+  if (!img) { msg.hidden = true; updateOverlays(p, null); return; }
+  if (img.error) { msg.textContent = img.error; msg.hidden = false; updateOverlays(p, img); return; }
   if (!img.raw) {                               // compressa: decodifica e poi ridisegna
     if (!img.decoding) { msg.textContent = 'Decodifica in corso…'; msg.hidden = false; }
-    prepare(img).then(() => { if (curImg() === img) { state.dirty = true; scheduleDraw(); } });
-    updateOverlays(img); return;
+    prepare(img).then(() => { if (p.img === img) { p.dirty = true; scheduleDraw(); } });
+    updateOverlays(p, img); return;
   }
-  prefetchAround();
+  prefetchAround(p);
   try {
-    if (state.dirty) { renderOffscreen(img); state.dirty = false; }
+    if (p.dirty || p.offImg !== img) { renderOffscreen(p, img); p.dirty = false; p.offImg = img; }
   } catch (e) {
-    img.error = e.message; msg.textContent = e.message; msg.hidden = false; updateOverlays(img); return;
+    img.error = e.message; msg.textContent = e.message; msg.hidden = false; updateOverlays(p, img); return;
   }
   msg.hidden = true;
-  const { sx, sy } = aspect(img), v = state.view;
+  const { sx, sy } = aspect(img), v = p.view;
   ctx.imageSmoothingEnabled = true; ctx.imageSmoothingQuality = 'high';
-  ctx.drawImage(off, v.x, v.y, img.info.cols * sx * v.scale, img.info.rows * sy * v.scale);
-  drawMeasures(img);
-  updateOverlays(img);
+  ctx.drawImage(p.off, v.x, v.y, img.info.cols * sx * v.scale, img.info.rows * sy * v.scale);
+  drawRefLines(p, img);
+  drawMeasures(p, img);
+  drawNotes(p, img);
+  updateOverlays(p, img);
+}
+
+// MPR: linee che indicano dove passano gli altri due piani
+function drawRefLines(p, img) {
+  if (!p.vol) return;
+  const pl = img.mpr.pl, ctx = p.ctx;
+  for (const q of state.panes) {
+    if (q === p || q.vol !== p.vol) continue;
+    const qa = q.axis, color = PLANE_COLORS[q.vol.pl[qa].name] || '#ccc';
+    let a, b;
+    if (qa === pl.xa) { const x = (pl.fx ? pl.W - 1 - q.idx : q.idx) + 0.5; a = toScreen(p, { x, y: 0 }); b = toScreen(p, { x, y: pl.H }); }
+    else if (qa === pl.ya) { const y = (pl.fy ? pl.H - 1 - q.idx : q.idx) + 0.5; a = toScreen(p, { x: 0, y }); b = toScreen(p, { x: pl.W, y }); }
+    else continue;
+    ctx.save(); ctx.strokeStyle = color; ctx.globalAlpha = 0.8; ctx.lineWidth = 1; ctx.setLineDash([6, 4]);
+    ctx.beginPath(); ctx.moveTo(a.x, a.y); ctx.lineTo(b.x, b.y); ctx.stroke(); ctx.restore();
+  }
 }
 
 function measuresFor(img) { if (!state.measures.has(img)) state.measures.set(img, []); return state.measures.get(img); }
@@ -758,15 +1189,15 @@ function measureLabel(img, m) {
   const sp = img.info.spacing, dx = m.b.x - m.a.x, dy = m.b.y - m.a.y;
   return sp ? `${Math.hypot(dx * sp[1], dy * sp[0]).toFixed(1)} mm` : `${Math.hypot(dx, dy).toFixed(1)} px`;
 }
-function drawMeasures(img) {
+function drawMeasures(p, img) {
   const list = state.measures.get(img); if (!list) return;
-  const color = getComputedStyle(document.documentElement).getPropertyValue('--measure').trim() || '#ffd84a';
+  const ctx = p.ctx, color = getComputedStyle(document.documentElement).getPropertyValue('--measure').trim() || '#ffd84a';
   ctx.font = '600 12px ui-monospace,Consolas,monospace'; ctx.textBaseline = 'middle';
   for (const m of list) {
-    const a = toScreen(m.a), b = toScreen(m.b);
+    const a = toScreen(p, m.a), b = toScreen(p, m.b);
     ctx.lineWidth = 1.5; ctx.strokeStyle = color;
     ctx.beginPath(); ctx.moveTo(a.x, a.y); ctx.lineTo(b.x, b.y); ctx.stroke();
-    for (const p of [a, b]) { ctx.beginPath(); ctx.arc(p.x, p.y, 3, 0, Math.PI * 2); ctx.stroke(); }
+    for (const q of [a, b]) { ctx.beginPath(); ctx.arc(q.x, q.y, 3, 0, Math.PI * 2); ctx.stroke(); }
     // etichetta: testo giallo su riquadro scuro, sopra il centro della linea
     const t = measureLabel(img, m), w = ctx.measureText(t).width + 10;
     const tx = (a.x + b.x) / 2 - w / 2, ty = (a.y + b.y) / 2 - 16;
@@ -775,32 +1206,68 @@ function drawMeasures(img) {
   }
 }
 
-function updateOverlays(img) {
-  const tl = $('#ovTL'), tr = $('#ovTR'), bl = $('#ovBL'), br = $('#ovBR');
-  if (!img) { tl.textContent = tr.textContent = bl.textContent = br.textContent = ''; return; }
-  const I = img.info, s = state.cur, N = s.images.length;
-  const compact = viewSize().w < 520;                 // smartphone: solo le informazioni essenziali
-  const cut = t => compact && t && t.length > 22 ? t.slice(0, 21) + '…' : t;
-  tl.textContent = (compact ? [cut(I.patient || '(senza nome)'), I.studyDate]
+// Lettere di orientamento ai bordi (R/L destra-sinistra, A/P anteriore-posteriore, H/F testa-piedi)
+const OPP = { L: 'R', R: 'L', A: 'P', P: 'A', H: 'F', F: 'H' };
+function vecLetters(v) {
+  const L = [['L', 'R'], ['P', 'A'], ['H', 'F']];
+  return [0, 1, 2].filter(i => Math.abs(v[i]) > 0.25).sort((a, b) => Math.abs(v[b]) - Math.abs(v[a])).slice(0, 2)
+    .map(i => v[i] > 0 ? L[i][0] : L[i][1]).join('');
+}
+function orientLetters(img) {
+  const I = img.info;
+  let h = null, v = null;
+  if (I.orient) ({ h, v } = I.orient);
+  else if (I.iop && I.iop.length === 6) { h = I.iop.slice(0, 3); v = I.iop.slice(3); }
+  if (h) return { r: vecLetters(h), l: vecLetters(neg(h)), b: vecLetters(v), t: vecLetters(neg(v)) };
+  const po = (I.patientOrientation || '').toUpperCase().split('\\');
+  if (po.length === 2 && /^[LRAPHF]+$/.test(po[0]) && /^[LRAPHF]+$/.test(po[1])) {
+    const opp = s => [...s].map(c => OPP[c]).join('');
+    return { r: po[0], l: opp(po[0]), b: po[1], t: opp(po[1]) };
+  }
+  return null;
+}
+
+function paneLabel(img) {
+  const I = img.info;
+  if (I.planeName) return I.planeName;
+  if (XRAY.has(I.modality)) return projectionView(I).label;
+  return seriesPlane(I);
+}
+
+function updateOverlays(p, img) {
+  const o = p.ov, om = p.om;
+  if (!img) {
+    o.tl.textContent = o.tr.textContent = o.bl.textContent = o.br.textContent = '';
+    om.t.textContent = om.b.textContent = om.l.textContent = om.r.textContent = '';
+    return;
+  }
+  const I = img.info, N = p.images.length, { w } = p.size();
+  const lvl = w < 300 ? 2 : w < 520 ? 1 : 0;          // riquadri piccoli: solo le informazioni essenziali
+  p.el.classList.toggle('tiny', lvl === 2);
+  const cut = t => lvl && t && t.length > 22 ? t.slice(0, 21) + '…' : t;
+  o.tl.textContent = lvl === 2 ? '' : (lvl ? [cut(I.patient || '(senza nome)'), I.studyDate]
     : [I.patient || '(senza nome)', I.patientId, I.studyDate, I.studyDesc]).filter(Boolean).join('\n');
-  tr.textContent = [`${I.modality}  Serie ${I.seriesNumber || '-'}`, cut(I.seriesDesc),
-    `Img ${state.idx + 1} / ${N}` + (I.frames > 1 && !compact ? `  (frame ${img.frame + 1})` : ''),
-    !compact && I.ipp && I.ipp.length === 3 ? `Pos ${I.ipp.map(v => v.toFixed(1)).join(', ')}` : ''].filter(Boolean).join('\n');
+  const label = paneLabel(img), tr = [];
+  if (lvl < 2) tr.push(esc(`${I.modality}  Serie ${I.seriesNumber || '-'}`), esc(cut(I.seriesDesc) || ''));
+  if (label) tr.push(`<b style="color:${PLANE_COLORS[label] || 'inherit'}">${esc(label)}</b>`);
+  tr.push(esc(`Img ${p.idx + 1} / ${N}` + (I.frames > 1 && !lvl ? `  (frame ${img.frame + 1})` : '')));
+  if (!lvl && I.ipp && I.ipp.length === 3) tr.push(esc(`Pos ${I.ipp.map(v => v.toFixed(1)).join(', ')}`));
+  o.tr.innerHTML = tr.filter(Boolean).join('\n');
   const lines = [];
   if (!img.error) {
-    if (!isColor(img)) lines.push(`L: ${fmtNum(state.wc)}  W: ${fmtNum(state.ww)}`);
-    lines.push(`Zoom ${Math.round(state.view.scale * 100 * aspect(img).sx)}%`);
-    if (!compact) lines.push(`${I.cols}×${I.rows}` + (I.spacing ? `  ${I.spacing[1]}×${I.spacing[0]} mm` : '') + (I.thickness ? `  sp. ${I.thickness} mm` : ''));
+    if (!isColor(img)) lines.push(`L: ${fmtNum(p.wc)}  W: ${fmtNum(p.ww)}`);
+    if (lvl < 2) lines.push(`Zoom ${Math.round(p.view.scale * 100 * aspect(img).sx)}%`);
+    if (!lvl) lines.push(`${I.cols}×${I.rows}` + (I.spacing ? `  ${fmtMM(I.spacing[1])}×${fmtMM(I.spacing[0])} mm` : '') + (I.thickness ? `  sp. ${fmtMM(+I.thickness)} mm` : ''));
   }
-  bl.textContent = lines.join('\n');
+  o.bl.textContent = lines.join('\n');
   let cur = '';
-  if (state.cursor && !img.error && img.raw) {
-    const p = toImage(state.cursor.x, state.cursor.y), x = Math.floor(p.x), y = Math.floor(p.y);
+  if (p.cursor && !img.error && img.raw) {
+    const q = toImage(p, p.cursor.x, p.cursor.y), x = Math.floor(q.x), y = Math.floor(q.y);
     if (x >= 0 && y >= 0 && x < I.cols && y < I.rows) {
       const raw = img.raw;
       if (isColor(img)) {
-        const n = I.rows * I.cols, q = y * I.cols + x;
-        const v = img.planar ? [raw[q], raw[q + n], raw[q + 2 * n]] : [raw[3 * q], raw[3 * q + 1], raw[3 * q + 2]];
+        const n = I.rows * I.cols, k = y * I.cols + x;
+        const v = img.planar ? [raw[k], raw[k + n], raw[k + 2 * n]] : [raw[3 * k], raw[3 * k + 1], raw[3 * k + 2]];
         cur = `X ${x}  Y ${y}\nRGB ${v.join(', ')}`;
       } else {
         const v = raw[y * I.cols + x] * I.slope + I.intercept;
@@ -809,7 +1276,206 @@ function updateOverlays(img) {
       }
     }
   }
-  br.textContent = cur;
+  o.br.textContent = cur;
+  const ol = img.error ? null : orientLetters(img);
+  om.t.textContent = ol ? ol.t : ''; om.b.textContent = ol ? ol.b : ''; om.l.textContent = ol ? ol.l : ''; om.r.textContent = ol ? ol.r : '';
+}
+
+// ============================================================
+//  Note sulle immagini (salvate nel browser, su questo dispositivo)
+// ============================================================
+const NOTES_KEY = 'visualizzatore-dicom.note.v1';
+const NOTE_COLOR = '#ff9f1c';
+let notesDB = { v: 1, images: {} };
+try { const o = JSON.parse(localStorage.getItem(NOTES_KEY) || 'null'); if (o && o.images && typeof o.images === 'object') notesDB = o; } catch { /* archivio non disponibile */ }
+function saveNotes() {
+  try { localStorage.setItem(NOTES_KEY, JSON.stringify(notesDB)); return true; }
+  catch { setStatus('Il browser non permette di salvare le note (navigazione privata?): usa «Esporta» per non perderle.', true); return false; }
+}
+const newId = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
+const BAD_KEYS = new Set(['__proto__', 'constructor', 'prototype']);
+
+function imgKey(img) { return (img.info.sop || `${img.file.name}|${img.file.size}`) + '#' + img.frame; }
+// Dove si salva la nota di un'immagine; sx/sy convertono le coordinate dei volumi ridotti
+function noteRef(img) {
+  if (img.kind !== 'mpr') return { key: imgKey(img), sx: 1, sy: 1, img };
+  const { vol, pl, index } = img.mpr, f = vol.f;
+  if (pl.axis === 'k') { const src = vol.series.images[index]; return { key: imgKey(src), sx: f, sy: f, img: src }; }
+  const idx = index * f;
+  return { key: `mpr|${vol.series.uid}|${pl.axis}|${idx}`, sx: pl.xa === 'k' ? 1 : f, sy: pl.ya === 'k' ? 1 : f, img, mpr: { index: idx, name: pl.name } };
+}
+function refWhere(ref) {
+  const I = ref.img.info, ser = `${MOD_NAMES[I.modality] || I.modality} · ${I.seriesDesc || 'Serie ' + (I.seriesNumber || '')}`;
+  if (ref.mpr) return `${ser} · ${ref.mpr.name} ${ref.mpr.index + 1}`;
+  const loc = state.keyIndex.get(ref.key);
+  return loc ? `${ser} · Img ${loc.idx + 1}/${loc.series.images.length}` : ser;
+}
+function isLoadedKey(key) {
+  return state.keyIndex.has(key) || (key.startsWith('mpr|') && state.series.some(s => key.startsWith(`mpr|${s.uid}|`)));
+}
+
+function wrapText(ctx, text, maxW, maxLines) {
+  const out = [];
+  for (const para of String(text).split('\n')) {
+    let line = '';
+    for (const w of para.split(/\s+/)) {
+      const t = line ? line + ' ' + w : w;
+      if (line && ctx.measureText(t).width > maxW) { out.push(line); line = w; } else line = t;
+    }
+    out.push(line);
+  }
+  if (out.length > maxLines) { out.length = maxLines; out[maxLines - 1] += ' …'; }
+  return out;
+}
+
+function drawNotes(p, img) {
+  if (!state.showNotes) return;
+  const ref = noteRef(img), e = notesDB.images[ref.key];
+  if (!e || !e.notes.length) return;
+  const ctx = p.ctx, { w, h } = p.size(), maxW = Math.min(230, w * 0.55), showBox = w >= 180;
+  ctx.save();
+  e.notes.forEach((n, i) => {
+    const s = toScreen(p, { x: n.x / ref.sx, y: n.y / ref.sy });
+    let box = null;
+    if (showBox) {
+      ctx.font = '13px system-ui,-apple-system,"Segoe UI",Roboto,sans-serif'; ctx.textBaseline = 'top'; ctx.textAlign = 'left';
+      const lines = wrapText(ctx, n.text, maxW - 12, 4), lh = 16;
+      const bw = Math.min(maxW, Math.max(...lines.map(l => ctx.measureText(l).width)) + 12), bh = lines.length * lh + 8;
+      let bx = s.x + 15, by = s.y - bh / 2;
+      if (bx + bw > w - 4) bx = s.x - 15 - bw;                        // non c'è spazio a destra: a sinistra
+      if (bx < 4) { bx = clamp(s.x - bw / 2, 4, Math.max(4, w - bw - 4)); by = s.y + 15; }   // né a sinistra: sotto
+      by = clamp(by, 4, Math.max(4, h - bh - 4));
+      ctx.fillStyle = 'rgba(0,0,0,.8)'; ctx.fillRect(bx, by, bw, bh);
+      ctx.strokeStyle = NOTE_COLOR; ctx.lineWidth = 1; ctx.strokeRect(bx + 0.5, by + 0.5, bw - 1, bh - 1);
+      ctx.fillStyle = '#fff'; lines.forEach((l, k) => ctx.fillText(l, bx + 6, by + 5 + k * lh));
+      box = [bx, by, bw, bh];
+    }
+    ctx.beginPath(); ctx.arc(s.x, s.y, 10, 0, Math.PI * 2);
+    ctx.fillStyle = NOTE_COLOR; ctx.fill(); ctx.lineWidth = 2; ctx.strokeStyle = '#000'; ctx.stroke();
+    ctx.font = '700 11px system-ui,sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillStyle = '#1a1200';
+    ctx.fillText(String(i + 1), s.x, s.y + 0.5);
+    p.noteHits.push({ ref, note: n, x: s.x, y: s.y, box });
+  });
+  ctx.restore();
+}
+function noteAt(p, pt) {
+  for (let i = p.noteHits.length - 1; i >= 0; i--) {
+    const h = p.noteHits[i];
+    if (Math.hypot(pt.x - h.x, pt.y - h.y) <= 14) return h;
+    if (h.box && pt.x >= h.box[0] && pt.x <= h.box[0] + h.box[2] && pt.y >= h.box[1] && pt.y <= h.box[1] + h.box[3]) return h;
+  }
+  return null;
+}
+
+let noteCtx = null;
+function openNoteEditor(ref, note, pt) {
+  noteCtx = { ref, note, pt };
+  $('#noteTitle').textContent = note ? 'Modifica nota' : 'Nuova nota';
+  $('#noteWhere').textContent = refWhere(ref);
+  $('#noteText').value = note ? note.text : '';
+  $('#noteDelete').hidden = !note;
+  const d = $('#noteDlg'); d.returnValue = ''; d.showModal();
+  setTimeout(() => $('#noteText').focus(), 50);
+}
+$('#noteDlg').addEventListener('close', () => {
+  const c = noteCtx, res = $('#noteDlg').returnValue; noteCtx = null;
+  if (!c || (res !== 'save' && res !== 'delete')) return;
+  const text = $('#noteText').value.trim().slice(0, 2000);
+  if (c.note) {
+    const e = notesDB.images[c.ref.key];
+    if (res === 'delete' || !text) { e.notes.splice(e.notes.indexOf(c.note), 1); if (!e.notes.length) delete notesDB.images[c.ref.key]; }
+    else { c.note.text = text; c.note.t = Date.now(); }
+  } else if (res === 'save' && text) {
+    const I = c.ref.img.info;
+    const e = notesDB.images[c.ref.key] ||= { study: I.studyUID || '', series: I.seriesUID, where: refWhere(c.ref), notes: [] };
+    e.notes.push({ id: newId(), x: c.pt.x * c.ref.sx, y: c.pt.y * c.ref.sy, text, t: Date.now() });
+  } else return;
+  if (saveNotes()) setStatus(res === 'delete' || !text ? 'Nota eliminata' : 'Nota salvata su questo dispositivo');
+  renderNotesList(); scheduleDraw();
+});
+$('#noteDelete').onclick = () => $('#noteDlg').close('delete');
+$('#noteText').addEventListener('keydown', e => { if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) { e.preventDefault(); $('#noteDlg').close('save'); } });
+
+function renderNotesList() {
+  const box = $('#notesList'), list = [];
+  let total = 0;
+  for (const [key, e] of Object.entries(notesDB.images)) {
+    total += e.notes.length;
+    if (isLoadedKey(key)) e.notes.forEach((n, i) => list.push({ key, e, n, i }));
+  }
+  $('#notesCount').textContent = list.length ? `(${list.length})` : '';
+  box.innerHTML = '';
+  if (!list.length) box.innerHTML = `<p class="emptyList">${state.series.length ? 'Nessuna nota su questo esame: scegli lo strumento «Nota» e tocca l\'immagine.' : 'Le note dell\'esame aperto compariranno qui.'}</p>`;
+  for (const it of list) {
+    const b = document.createElement('button'); b.className = 'noteItem';
+    b.innerHTML = `<span class="nIdx">${it.i + 1}</span><span class="nBody"><span class="nText">${esc(it.n.text)}</span><span class="sub">${esc(it.e.where || '')}</span></span>`;
+    b.onclick = () => { openSeriesPanel(false); goToNote(it.key); };
+    box.appendChild(b);
+  }
+  if (total > list.length) box.insertAdjacentHTML('beforeend', `<p class="emptyList">${total - list.length} note di altri esami sono salvate in questo browser.</p>`);
+  $('#notesExport').disabled = !total;
+  $('#notesClear').disabled = !list.length;
+  $('#notesToggle').textContent = state.showNotes ? 'Nascondi' : 'Mostra';
+}
+
+async function goToNote(key) {
+  if (key.startsWith('mpr|')) {
+    const [, uid, axis, idx] = key.split('|'), s = state.series.find(x => x.uid === uid);
+    if (!s) return;
+    if (!state.panes.some(q => q.vol && q.vol.series === s)) await setLayout(state.layout, s, 'mpr');
+    const p = state.panes.find(q => q.vol && q.vol.series === s && q.axis === axis);
+    if (p) { setActive(p); setSlice(p, Math.round(+idx / p.vol.f)); }
+    return;
+  }
+  const loc = state.keyIndex.get(key); if (!loc) return;
+  const find = () => state.panes.find(q => q.series === loc.series && !q.vol && q.idx === loc.idx) ||
+    state.panes.find(q => q.series === loc.series && (!q.vol || q.axis === 'k'));
+  let p = find();
+  if (!p) {
+    if (state.layout === 'auto') { await setLayout('auto', loc.series); p = find() || state.panes[0]; }
+    else if (state.layoutUsed === 'mpr') { await setLayout(state.layout, loc.series, '1'); p = state.panes[0]; }
+    else { p = state.active; showSeries(p, loc.series, loc.idx); }
+  }
+  setActive(p); setSlice(p, loc.idx); scheduleDraw();
+}
+
+function download(blob, name) {
+  const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = name;
+  document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(a.href), 2000);
+}
+function exportNotes() {
+  const keys = Object.keys(notesDB.images).filter(isLoadedKey), use = keys.length ? keys : Object.keys(notesDB.images);
+  const out = { app: 'Visualizzatore DICOM', contenuto: 'note', versione: 1, esportato: new Date().toISOString(), images: {} };
+  use.forEach(k => out.images[k] = notesDB.images[k]);
+  const d = new Date(), stamp = `${d.getFullYear()}${String(d.getMonth() + 1).padStart(2, '0')}${String(d.getDate()).padStart(2, '0')}`;
+  download(new Blob([JSON.stringify(out, null, 2)], { type: 'application/json' }), `note-dicom-${stamp}.json`);
+}
+async function importNotes(file) {
+  let added = 0;
+  try {
+    const o = JSON.parse(await file.text());
+    if (!o || typeof o.images !== 'object') throw new Error();
+    for (const [k, e] of Object.entries(o.images)) {
+      if (BAD_KEYS.has(k) || !e || !Array.isArray(e.notes)) continue;
+      const cur = notesDB.images[k] ||= { study: String(e.study || ''), series: String(e.series || ''), where: String(e.where || ''), notes: [] };
+      for (const n of e.notes) {
+        if (!n || typeof n.text !== 'string' || !Number.isFinite(n.x) || !Number.isFinite(n.y)) continue;
+        const id = String(n.id || newId());
+        if (cur.notes.some(m => m.id === id)) continue;
+        cur.notes.push({ id, x: n.x, y: n.y, text: n.text.slice(0, 2000), t: +n.t || Date.now() }); added++;
+      }
+      if (!cur.notes.length) delete notesDB.images[k];
+    }
+  } catch { setStatus('File di note non valido', true); return; }
+  saveNotes(); renderNotesList(); scheduleDraw();
+  setStatus(added ? `${added} note importate` : 'Nessuna nota nuova da importare');
+}
+function clearExamNotes() {
+  const keys = Object.keys(notesDB.images).filter(isLoadedKey);
+  const n = keys.reduce((a, k) => a + notesDB.images[k].notes.length, 0);
+  if (!n || !confirm(`Eliminare le ${n} note di questo esame? L'operazione non si può annullare.`)) return;
+  keys.forEach(k => delete notesDB.images[k]);
+  saveNotes(); renderNotesList(); scheduleDraw(); setStatus('Note dell\'esame eliminate');
 }
 
 // ============================================================
@@ -819,9 +1485,10 @@ function renderSeriesList() {
   const box = $('#seriesList'); box.innerHTML = '';
   state.series.forEach((s, i) => {
     const b = document.createElement('button'); b.className = 'series';
-    const err = s.images.every(m => m.error);
-    b.innerHTML = `<span class="mod">${esc(s.info.modality)}</span>${esc(s.info.seriesDesc || 'Serie ' + (s.info.seriesNumber || i + 1))}` +
-      `<span class="sub">${s.images.length} immagini${s.info.studyDate ? ' · ' + esc(s.info.studyDate) : ''}</span>` +
+    const err = !usable(s), I = s.info;
+    const what = XRAY.has(I.modality) ? [...new Set(s.images.map(m => projectionView(m.info).label).filter(Boolean))].join(', ') : seriesPlane(I);
+    b.innerHTML = `<span class="mod">${esc(I.modality)}</span>${esc(I.seriesDesc || 'Serie ' + (I.seriesNumber || i + 1))}` +
+      `<span class="sub">${what ? esc(what) + ' · ' : ''}${s.images.length} immagini${volumeInfo(s) && s.images.length >= 10 ? ' · <b class="vol">3D</b>' : ''}</span>` +
       (err ? `<span class="sub warn">formato non supportato</span>` : '');
     b.onclick = () => { selectSeries(i); openSeriesPanel(false); };
     box.appendChild(b);
@@ -829,63 +1496,71 @@ function renderSeriesList() {
 }
 
 function selectSeries(i) {
-  state.cur = state.series[i];
-  document.querySelectorAll('.series').forEach((b, k) => b.classList.toggle('active', k === i));
-  const N = state.cur.images.length;
-  const film = state.cur.images.every(m => m.file === state.cur.images[0].file);   // filmato multi-frame
-  state.idx = film ? 0 : Math.floor((N - 1) / 2);
-  const slider = $('#slider'); slider.max = N - 1; slider.value = state.idx; slider.disabled = N < 2;
-  togglePlay(false); $('#playBtn').disabled = N < 2;
-  $('#seriesBtn').innerHTML = '<span class="ic">☰</span>' + (state.series.length > 1 ? `<span>${state.series.length}</span>` : '');
-  $('#empty').hidden = true;
-  ['#invertBtn', '#resetBtn', '#exportBtn'].forEach(s => $(s).disabled = false);
-  state.invert = false; $('#invertBtn').classList.remove('active');
-  buildPresets();
-  resetWindow();
-  fitView();
-  updateSliceLabel(); renderTags(); scheduleDraw();
+  const s = state.series[i]; if (!s) return;
+  if (state.layout === 'auto' || state.layout === 'mpr' || state.layoutUsed === 'mpr') setLayout(state.layout, s);
+  else { showSeries(state.active, s); state.layoutUsed = String(state.panes.length); syncControls(); scheduleDraw(); }
 }
 
-function setSlice(i) {
-  if (!state.cur) return;
-  i = clamp(i, 0, state.cur.images.length - 1);
-  if (i === state.idx) return;
-  state.idx = i; $('#slider').value = i; state.dirty = true;
-  updateSliceLabel(); renderTags(); scheduleDraw();
+function setSlice(p, i) {
+  if (!p || !p.images.length) return;
+  i = clamp(Math.round(i), 0, p.images.length - 1);
+  if (i === p.idx) return;
+  p.idx = i; p.dirty = true;
+  if (p === state.active) { $('#slider').value = i; updateSliceLabel(); renderTags(); }
+  scheduleDraw();
 }
 function updateSliceLabel() {
-  $('#sliceLabel').textContent = state.cur ? `${state.idx + 1} / ${state.cur.images.length}` : '– / –';
+  const p = state.active;
+  $('#sliceLabel').textContent = p && p.images.length ? `${p.idx + 1} / ${p.images.length}` : '– / –';
 }
 
-function buildPresets() {
-  const sel = $('#preset'), mod = state.cur.info.modality;
-  const opts = [['file', 'Finestra dal file'], ['auto', 'Automatica (min/max)']];
-  if (mod === 'CT') CT_PRESETS.forEach(p => opts.push([p[0], p[1] + ` (${p[2]}/${p[3]})`]));
-  sel.innerHTML = opts.map(o => `<option value="${o[0]}">${esc(o[1])}</option>`).join('') + '<option value="custom" disabled>Personalizzata</option>';
-  sel.disabled = state.cur.images.every(m => m.error || isColor(m));
+function buildPresets(p) {
+  const sel = $('#preset');
+  if (!p || !p.series) { sel.innerHTML = ''; sel.dataset.mod = ''; sel.disabled = true; return; }
+  const mod = p.series.info.modality;
+  if (sel.dataset.mod !== mod) {
+    const opts = [['file', 'Finestra dal file'], ['auto', 'Automatica (min/max)']];
+    if (mod === 'CT') CT_PRESETS.forEach(x => opts.push([x[0], x[1] + ` (${x[2]}/${x[3]})`]));
+    sel.innerHTML = opts.map(o => `<option value="${o[0]}">${esc(o[1])}</option>`).join('') + '<option value="custom" disabled>Personalizzata</option>';
+    sel.dataset.mod = mod;
+  }
+  sel.disabled = !p.img || p.images.every(m => m.error || isColor(m));
+  sel.value = p.preset || 'file';
 }
 
-async function applyPreset(key) {
-  const s = state.cur; let img = curImg();
+function setWindow(p, wc, ww, key) {
+  for (const q of linked(p)) { q.wc = wc; q.ww = ww; q.preset = key; q.dirty = true; }
+  if (linked(p).includes(state.active)) $('#preset').value = key;
+}
+async function applyPreset(p, key) {
+  const token = p.token; let img = p.img;
   if (img) await prepare(img);
   if (!img || img.error) {                       // cerca un'immagine leggibile tra le prime
     img = null;
-    for (const m of s.images.slice(0, 10)) { await prepare(m); if (!m.error) { img = m; break; } }
+    for (const m of p.images.slice(0, 10)) { await prepare(m); if (!m.error) { img = m; break; } }
   }
-  if (s !== state.cur || !img || isColor(img)) return;
+  if (p.token !== token || !img || isColor(img)) return;
   let st; try { st = getStats(img); } catch { return; }
-  state.sens = Math.max((st.max - st.min) / 800, 0.05);
-  const p = CT_PRESETS.find(p => p[0] === key);
-  if (p) { state.wc = p[2]; state.ww = p[3]; }
-  else if (key === 'file' && img.info.wc != null && img.info.ww > 0) { state.wc = img.info.wc; state.ww = img.info.ww; }
-  else { state.wc = (st.min + st.max) / 2; state.ww = Math.max(1, st.max - st.min); key = key === 'file' ? 'auto' : key; }
-  $('#preset').value = key; state.dirty = true; scheduleDraw();
+  const pr = CT_PRESETS.find(x => x[0] === key);
+  let wc, ww;
+  if (pr) { wc = pr[2]; ww = pr[3]; }
+  else if (key === 'file' && img.info.wc != null && img.info.ww > 0) { wc = img.info.wc; ww = img.info.ww; }
+  else { wc = (st.min + st.max) / 2; ww = Math.max(1, st.max - st.min); if (key === 'file') key = 'auto'; }
+  for (const q of linked(p)) q.sens = Math.max((st.max - st.min) / 800, 0.05);
+  setWindow(p, wc, ww, key); scheduleDraw();
 }
-function resetWindow() { applyPreset('file'); }
 
 function setTool(t) {
   state.tool = t;
   document.querySelectorAll('#tools button').forEach(b => b.classList.toggle('active', b.dataset.tool === t));
+}
+
+// MPR: un punto scelto in una vista sposta gli altri due piani su quel punto
+function crossAt(p, pt) {
+  if (!p.vol) return;
+  const q = toImage(p, pt.x, pt.y), pl = p.vol.pl[p.axis];
+  const v = planeToVol(pl, clamp(Math.floor(q.x), 0, pl.W - 1), clamp(Math.floor(q.y), 0, pl.H - 1), p.idx);
+  for (const o of state.panes) if (o !== p && o.vol === p.vol) setSlice(o, v[o.axis]);
 }
 
 // ============================================================
@@ -916,9 +1591,8 @@ let tagsShownFor = null;
 function renderTags(force) {
   const panel = $('#tags'); if (panel.hidden) return;
   const img = curImg(), tbody = $('#tagTable tbody');
-  if (!img) { tbody.innerHTML = ''; $('#tagFile').textContent = ''; return; }
+  if (!img) { tbody.innerHTML = ''; $('#tagFile').textContent = ''; tagsShownFor = null; return; }
   const q = $('#tagFilter').value.trim().toLowerCase();
-  const key = img.ds + '|' + q;
   if (!force && tagsShownFor && tagsShownFor.ds === img.ds && tagsShownFor.q === q) return;
   tagsShownFor = { ds: img.ds, q };
   $('#tagFile').textContent = img.file.zipPath || img.file.webkitRelativePath || img.file.name;
@@ -936,115 +1610,136 @@ function renderTags(force) {
 }
 
 // ============================================================
-//  Eventi
+//  Eventi delle viste: mouse, penna e dita
 // ============================================================
-// Puntatori attivi (mouse, penna o dita): servono per riconoscere i gesti a due dita
-const pointers = new Map();
-let drag = null, pinch = null, gestureLock = false, lastTap = null;
-function pos(e) { const r = canvas.getBoundingClientRect(); return { x: e.clientX - r.left, y: e.clientY - r.top }; }
-
-canvas.addEventListener('contextmenu', e => e.preventDefault());
-canvas.addEventListener('pointerdown', e => {
-  const img = curImg(); if (!img || img.error) return;
-  try { canvas.setPointerCapture(e.pointerId); } catch { /* puntatore già rilasciato */ }
-  const p = pos(e); pointers.set(e.pointerId, p);
-  e.preventDefault();
-  if (pointers.size === 2) { cancelDrag(); startPinch(); return; }   // secondo dito: zoom/spostamento
-  if (pointers.size > 2 || gestureLock) return;
-  const tool = e.button === 2 ? 'pan' : e.button === 1 ? 'zoom' : state.tool;
-  drag = { tool, x: p.x, y: p.y, wc: state.wc, ww: state.ww, idx: state.idx, vx: state.view.x, vy: state.view.y,
-           scale: state.view.scale, moved: false, t: performance.now() };
-  if (tool === 'measure') { const q = toImage(p.x, p.y); drag.m = { a: q, b: q }; measuresFor(img).push(drag.m); }
-});
-canvas.addEventListener('pointermove', e => {
-  const p = pos(e);
-  if (pointers.has(e.pointerId)) pointers.set(e.pointerId, p);
-  if (e.pointerType === 'mouse') state.cursor = p;
-  if (pinch && pointers.size >= 2) {
-    const [a, b] = [...pointers.values()];
-    const d = Math.hypot(a.x - b.x, a.y - b.y) || 1, m = { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 };
-    const ns = clamp(pinch.v0.scale * d / pinch.d0, 0.05, 50), f = ns / pinch.v0.scale;
-    state.view = { scale: ns, x: m.x - (pinch.m0.x - pinch.v0.x) * f, y: m.y - (pinch.m0.y - pinch.v0.y) * f };
-    state.autoFit = false; scheduleDraw(); return;
-  }
-  if (drag) {
-    const dx = p.x - drag.x, dy = p.y - drag.y;
-    if (Math.hypot(dx, dy) > 6) drag.moved = true;
-    switch (drag.tool) {
-      case 'scroll': {
-        const N = state.cur.images.length, step = clamp(viewSize().h / Math.max(N, 1), 4, 24);
-        setSlice(drag.idx + Math.round(dy / step)); break;
-      }
-      case 'window':
-        if (isColor(curImg())) break;
-        state.ww = Math.max(1, drag.ww + dx * state.sens);
-        state.wc = drag.wc + dy * state.sens;
-        state.dirty = true; $('#preset').value = 'custom'; break;
-      case 'pan':
-        state.view.x = drag.vx + dx; state.view.y = drag.vy + dy; state.autoFit = false; break;
-      case 'zoom': {
-        const ns = clamp(drag.scale * Math.exp(-dy * 0.01), 0.05, 50), f = ns / drag.scale;
-        state.view = { scale: ns, x: drag.x - (drag.x - drag.vx) * f, y: drag.y - (drag.y - drag.vy) * f };
-        state.autoFit = false; break;
-      }
-      case 'measure': drag.m.b = toImage(p.x, p.y); break;
+function attachPaneEvents(p) {
+  const cv = p.canvas;
+  const pos = e => { const r = cv.getBoundingClientRect(); return { x: e.clientX - r.left, y: e.clientY - r.top }; };
+  cv.addEventListener('contextmenu', e => e.preventDefault());
+  cv.addEventListener('pointerdown', e => {
+    if (state.active !== p) setActive(p);
+    const img = p.img; if (!img || img.error) return;
+    try { cv.setPointerCapture(e.pointerId); } catch { /* puntatore già rilasciato */ }
+    const pt = pos(e); p.pointers.set(e.pointerId, pt);
+    e.preventDefault();
+    if (p.pointers.size === 2) { cancelDrag(p); startPinch(p); return; }   // secondo dito: zoom/spostamento
+    if (p.pointers.size > 2 || p.gestureLock) return;
+    let tool = e.button === 2 ? 'pan' : e.button === 1 ? 'zoom' : state.tool;
+    const hit = e.button === 0 && tool !== 'measure' ? noteAt(p, pt) : null;
+    if (hit) tool = 'noteMove';                    // su una nota: tocco = modifica, trascinamento = sposta
+    p.drag = { tool, hit, x: pt.x, y: pt.y, wc: p.wc, ww: p.ww, idx: p.idx, vx: p.view.x, vy: p.view.y,
+      scale: p.view.scale, moved: false, t: performance.now(), nx: hit && hit.note.x, ny: hit && hit.note.y };
+    if (tool === 'measure') { const q = toImage(p, pt.x, pt.y); p.drag.m = { a: q, b: q }; measuresFor(img).push(p.drag.m); }
+    if (tool === 'cross') crossAt(p, pt);
+  });
+  cv.addEventListener('pointermove', e => {
+    const pt = pos(e);
+    if (p.pointers.has(e.pointerId)) p.pointers.set(e.pointerId, pt);
+    if (e.pointerType === 'mouse') {
+      p.cursor = pt;
+      if (!p.drag) cv.style.cursor = noteAt(p, pt) ? 'pointer' : state.tool === 'note' ? 'copy' : '';
     }
-  }
-  scheduleDraw();
-});
-function startPinch() {
-  const [a, b] = [...pointers.values()];
-  pinch = { d0: Math.hypot(a.x - b.x, a.y - b.y) || 1, m0: { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 }, v0: { ...state.view } };
-  gestureLock = true;                      // nessun nuovo trascinamento finché non si alzano tutte le dita
-}
-function cancelDrag() {                    // annulla l'effetto del primo dito quando arriva il secondo
-  if (!drag) return;
-  if (drag.m) { const l = measuresFor(curImg()); const i = l.indexOf(drag.m); if (i >= 0) l.splice(i, 1); }
-  if (drag.tool === 'window') { state.wc = drag.wc; state.ww = drag.ww; state.dirty = true; }
-  if (drag.tool === 'scroll') setSlice(drag.idx);
-  drag = null;
-}
-function endDrag() {
-  if (drag && drag.m) {
-    const a = toScreen(drag.m.a), b = toScreen(drag.m.b);
-    if (Math.hypot(a.x - b.x, a.y - b.y) < 3) { const l = measuresFor(curImg()); l.splice(l.indexOf(drag.m), 1); }
-  }
-  drag = null; scheduleDraw();
-}
-function pointerUp(e) {
-  pointers.delete(e.pointerId);
-  if (pinch && pointers.size < 2) pinch = null;
-  if (drag) {
-    const tap = !drag.moved && performance.now() - drag.t < 300 && e.type === 'pointerup';
-    endDrag();
-    if (tap && e.pointerType !== 'mouse') {          // doppio tocco = adatta allo schermo
-      const now = performance.now(), p = pos(e);
-      if (lastTap && now - lastTap.t < 350 && Math.hypot(p.x - lastTap.x, p.y - lastTap.y) < 30) { fitView(); scheduleDraw(); lastTap = null; }
-      else lastTap = { t: now, x: p.x, y: p.y };
+    if (p.pinch && p.pointers.size >= 2) {
+      const [a, b] = [...p.pointers.values()];
+      const d = Math.hypot(a.x - b.x, a.y - b.y) || 1, m = { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 };
+      const ns = clamp(p.pinch.v0.scale * d / p.pinch.d0, 0.05, 50), f = ns / p.pinch.v0.scale;
+      p.view = { scale: ns, x: m.x - (p.pinch.m0.x - p.pinch.v0.x) * f, y: m.y - (p.pinch.m0.y - p.pinch.v0.y) * f };
+      p.autoFit = false; scheduleDraw(); return;
     }
-  }
-  if (!pointers.size) gestureLock = false;
+    const d = p.drag;
+    if (d) {
+      const dx = pt.x - d.x, dy = pt.y - d.y;
+      if (Math.hypot(dx, dy) > 6) d.moved = true;
+      switch (d.tool) {
+        case 'scroll': {
+          const N = p.images.length, step = clamp(p.size().h / Math.max(N, 1), 4, 24);
+          setSlice(p, d.idx + Math.round(dy / step)); break;
+        }
+        case 'window':
+          if (isColor(p.img)) break;
+          setWindow(p, d.wc + dy * p.sens, Math.max(1, d.ww + dx * p.sens), 'custom'); break;
+        case 'pan':
+          p.view.x = d.vx + dx; p.view.y = d.vy + dy; p.autoFit = false; break;
+        case 'zoom': {
+          const ns = clamp(d.scale * Math.exp(-dy * 0.01), 0.05, 50), f = ns / d.scale;
+          p.view = { scale: ns, x: d.x - (d.x - d.vx) * f, y: d.y - (d.y - d.vy) * f };
+          p.autoFit = false; break;
+        }
+        case 'measure': d.m.b = toImage(p, pt.x, pt.y); break;
+        case 'cross': crossAt(p, pt); break;
+        case 'noteMove':
+          if (d.moved) { const q = toImage(p, pt.x, pt.y); d.hit.note.x = q.x * d.hit.ref.sx; d.hit.note.y = q.y * d.hit.ref.sy; }
+          break;
+      }
+    }
+    scheduleDraw();
+  });
+  const up = e => pointerUp(p, e, pos(e));
+  cv.addEventListener('pointerup', up);
+  cv.addEventListener('pointercancel', up);
+  cv.addEventListener('pointerleave', e => { if (e.pointerType === 'mouse') { p.cursor = null; scheduleDraw(); } });
+  cv.addEventListener('dblclick', () => { fitView(p); scheduleDraw(); });
+  let wheelAcc = 0;
+  cv.addEventListener('wheel', e => {
+    e.preventDefault(); if (!p.img) return;
+    if (state.active !== p) setActive(p);
+    const dy = e.deltaMode === 1 ? e.deltaY * 33 : e.deltaY;
+    if (e.ctrlKey || e.metaKey) { zoomAt(p, Math.exp(-dy * 0.0015), e.offsetX, e.offsetY); return; }
+    if (Math.abs(dy) >= 50) { setSlice(p, p.idx + Math.sign(dy)); wheelAcc = 0; return; }
+    wheelAcc += dy;                                   // trackpad: accumula
+    if (Math.abs(wheelAcc) >= 50) { setSlice(p, p.idx + Math.sign(wheelAcc)); wheelAcc = 0; }
+  }, { passive: false });
 }
-canvas.addEventListener('pointerup', pointerUp);
-canvas.addEventListener('pointercancel', pointerUp);
-canvas.addEventListener('pointerleave', e => { if (e.pointerType === 'mouse') { state.cursor = null; scheduleDraw(); } });
-canvas.addEventListener('dblclick', () => { fitView(); scheduleDraw(); });
+function startPinch(p) {
+  const [a, b] = [...p.pointers.values()];
+  p.pinch = { d0: Math.hypot(a.x - b.x, a.y - b.y) || 1, m0: { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 }, v0: { ...p.view } };
+  p.gestureLock = true;                      // nessun nuovo trascinamento finché non si alzano tutte le dita
+}
+function cancelDrag(p) {                     // annulla l'effetto del primo dito quando arriva il secondo
+  const d = p.drag; if (!d) return;
+  if (d.m) { const l = measuresFor(p.img); const i = l.indexOf(d.m); if (i >= 0) l.splice(i, 1); }
+  if (d.tool === 'window') setWindow(p, d.wc, d.ww, p.preset);
+  if (d.tool === 'scroll') setSlice(p, d.idx);
+  if (d.tool === 'noteMove') { d.hit.note.x = d.nx; d.hit.note.y = d.ny; }
+  p.drag = null;
+}
+function pointerUp(p, e, pt) {
+  p.pointers.delete(e.pointerId);
+  if (p.pinch && p.pointers.size < 2) p.pinch = null;
+  const d = p.drag;
+  if (d) {
+    p.drag = null;
+    const isUp = e.type === 'pointerup', quick = !d.moved && performance.now() - d.t < 300 && isUp;
+    if (d.m) {
+      const a = toScreen(p, d.m.a), b = toScreen(p, d.m.b);
+      if (Math.hypot(a.x - b.x, a.y - b.y) < 3) { const l = measuresFor(p.img); l.splice(l.indexOf(d.m), 1); }
+    }
+    if (d.tool === 'noteMove') {
+      if (d.moved) { d.hit.note.t = Date.now(); saveNotes(); }
+      else if (isUp) openNoteEditor(d.hit.ref, d.hit.note);
+    } else if (d.tool === 'note' && !d.moved && isUp) {
+      const img = p.img, q = toImage(p, d.x, d.y);
+      if (q.x >= 0 && q.y >= 0 && q.x < img.info.cols && q.y < img.info.rows) openNoteEditor(noteRef(img), null, q);
+      else setStatus('Tocca un punto dentro l\'immagine per aggiungere la nota');
+    } else if (quick && e.pointerType !== 'mouse') {          // doppio tocco = adatta allo schermo
+      const now = performance.now();
+      if (p.lastTap && now - p.lastTap.t < 350 && Math.hypot(pt.x - p.lastTap.x, pt.y - p.lastTap.y) < 30) { fitView(p); p.lastTap = null; }
+      else p.lastTap = { t: now, x: pt.x, y: pt.y };
+    }
+    scheduleDraw();
+  }
+  if (!p.pointers.size) p.gestureLock = false;
+}
 // Safari iOS: evita lo zoom dell'intera pagina con due dita
 ['gesturestart', 'gesturechange'].forEach(t => document.addEventListener(t, e => e.preventDefault()));
 
-let wheelAcc = 0;
-canvas.addEventListener('wheel', e => {
-  e.preventDefault(); if (!state.cur) return;
-  const dy = e.deltaMode === 1 ? e.deltaY * 33 : e.deltaY;
-  if (e.ctrlKey || e.metaKey) { zoomAt(Math.exp(-dy * 0.0015), e.offsetX, e.offsetY); return; }
-  if (Math.abs(dy) >= 50) { setSlice(state.idx + Math.sign(dy)); wheelAcc = 0; return; }
-  wheelAcc += dy;                                   // trackpad: accumula
-  if (Math.abs(wheelAcc) >= 50) { setSlice(state.idx + Math.sign(wheelAcc)); wheelAcc = 0; }
-}, { passive: false });
-
-$('#slider').addEventListener('input', e => { togglePlay(false); setSlice(+e.target.value); });
-$('#preset').addEventListener('change', e => applyPreset(e.target.value));
-$('#tools').addEventListener('click', e => { const t = e.target.closest('button'); if (t) setTool(t.dataset.tool); });
+// ============================================================
+//  Comandi generali
+// ============================================================
+$('#slider').addEventListener('input', e => { togglePlay(false); setSlice(state.active, +e.target.value); });
+$('#preset').addEventListener('change', e => { if (state.active) applyPreset(state.active, e.target.value); });
+$('#layout').addEventListener('change', e => setLayout(e.target.value));
+$('#tools').addEventListener('click', e => { const t = e.target.closest('button'); if (t && !t.disabled) setTool(t.dataset.tool); });
 $('#invertBtn').onclick = toggleInvert;
 $('#resetBtn').onclick = resetAll;
 $('#exportBtn').onclick = exportPng;
@@ -1058,6 +1753,11 @@ $('#tagFilter').addEventListener('input', () => renderTags(true));
 $('#playBtn').onclick = () => togglePlay();
 $('#seriesBtn').onclick = () => openSeriesPanel(true);
 $('#seriesClose').onclick = $('#backdrop').onclick = () => openSeriesPanel(false);
+$('#notesExport').onclick = exportNotes;
+$('#notesImport').onchange = e => { if (e.target.files[0]) importNotes(e.target.files[0]); e.target.value = ''; };
+$('#notesClear').onclick = clearExamNotes;
+$('#notesToggle').onclick = () => { state.showNotes = !state.showNotes; renderNotesList(); scheduleDraw(); };
+$('#examChip').onclick = e => setStatus(e.target.title);
 
 function openSeriesPanel(open) {
   const p = $('#seriesPanel');
@@ -1066,63 +1766,64 @@ function openSeriesPanel(open) {
   p.classList.toggle('open', open);
   $('#backdrop').classList.toggle('show', open);
 }
-function toggleInvert() { if (!state.cur) return; state.invert = !state.invert; $('#invertBtn').classList.toggle('active', state.invert); state.dirty = true; scheduleDraw(); }
+function toggleInvert() {
+  const p = state.active; if (!p || !p.img) return;
+  const v = !p.invert;
+  for (const q of linked(p)) { q.invert = v; q.dirty = true; }
+  $('#invertBtn').classList.toggle('active', v); scheduleDraw();
+}
 function resetAll() {
-  if (!state.cur) return;
-  state.invert = false; $('#invertBtn').classList.remove('active');
-  state.measures.delete(curImg()); resetWindow(); fitView(); scheduleDraw();
+  const p = state.active; if (!p || !p.img) return;
+  for (const q of linked(p)) { q.invert = false; q.dirty = true; state.measures.delete(q.img); fitView(q); }
+  $('#invertBtn').classList.remove('active');
+  applyPreset(p, 'file'); scheduleDraw();
 }
 function toggleTags() {
-  const p = $('#tags'); p.hidden = !p.hidden; $('#tagsBtn').classList.toggle('active', !p.hidden);
-  renderTags(true); if (state.autoFit) fitView(); scheduleDraw();
+  const t = $('#tags'); t.hidden = !t.hidden; $('#tagsBtn').classList.toggle('active', !t.hidden);
+  renderTags(true); scheduleDraw();
 }
 function exportPng() {
-  const img = curImg(); if (!img) return;
-  draw();
-  canvas.toBlob(b => {
-    const a = document.createElement('a'); a.href = URL.createObjectURL(b);
-    a.download = `${(img.info.seriesDesc || 'dicom').replace(/[^\w-]+/g, '_')}_${state.idx + 1}.png`;
-    a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 2000);
-  });
+  const p = state.active, img = p && p.img; if (!img) return;
+  drawPane(p);
+  p.canvas.toBlob(b => download(b, `${(img.info.seriesDesc || 'dicom').replace(/[^\w-]+/g, '_')}_${p.idx + 1}.png`));
 }
 
 // Riproduzione automatica (serie o filmati multi-frame, rispettando il Frame Time)
-let playing = false, playTimer = null;
+let playing = false, playTimer = null, playPane = null;
 function togglePlay(force) {
   playing = force === undefined ? !playing : force;
-  if (playing && (!state.cur || state.cur.images.length < 2)) playing = false;
+  const p = state.active;
+  if (playing && (!p || p.images.length < 2)) playing = false;
+  playPane = playing ? p : null;
   const b = $('#playBtn'); b.textContent = playing ? '❚❚' : '▶'; b.classList.toggle('active', playing);
   clearTimeout(playTimer); if (playing) playStep();
 }
 async function playStep() {
-  if (!playing || !state.cur) return;
-  const t0 = performance.now(), N = state.cur.images.length, next = (state.idx + 1) % N;
-  await prepare(state.cur.images[next]);
-  if (!playing) return;
-  setSlice(next);
-  const img = curImg(), ft = img.info.frames > 1 ? num(img.ds, 'x00181063', null) : null;
+  const p = playPane; if (!playing || !p) return;
+  const t0 = performance.now(), N = p.images.length, next = (p.idx + 1) % N;
+  await prepare(p.images[next]);
+  if (!playing || playPane !== p) return;
+  setSlice(p, next);
+  const img = p.img, ft = img.info.frames > 1 && img.kind !== 'mpr' ? num(img.ds, 'x00181063', null) : null;
   playTimer = setTimeout(playStep, Math.max(0, (ft ? clamp(ft, 15, 500) : 100) - (performance.now() - t0)));
 }
 
 document.addEventListener('keydown', e => {
-  if (e.target.matches('input,select,textarea') || $('#help').open) return;
-  const k = e.key;
+  if (e.target.matches('input,select,textarea') || document.querySelector('dialog[open]')) return;
+  const p = state.active, k = e.key, go = d => p && setSlice(p, p.idx + d);
   const actions = {
-    ArrowUp: () => setSlice(state.idx - 1), ArrowLeft: () => setSlice(state.idx - 1),
-    ArrowDown: () => setSlice(state.idx + 1), ArrowRight: () => setSlice(state.idx + 1),
-    PageUp: () => setSlice(state.idx - 10), PageDown: () => setSlice(state.idx + 10),
-    Home: () => setSlice(0), End: () => setSlice(Infinity), ' ': () => togglePlay(),
+    ArrowUp: () => go(-1), ArrowLeft: () => go(-1), ArrowDown: () => go(1), ArrowRight: () => go(1),
+    PageUp: () => go(-10), PageDown: () => go(10),
+    Home: () => p && setSlice(p, 0), End: () => p && setSlice(p, Infinity), ' ': () => togglePlay(),
     s: () => setTool('scroll'), w: () => setTool('window'), p: () => setTool('pan'), z: () => setTool('zoom'), m: () => setTool('measure'),
-    i: toggleInvert, r: resetAll, t: toggleTags, f: () => { fitView(); scheduleDraw(); },
-    Delete: () => { if (curImg()) { state.measures.delete(curImg()); scheduleDraw(); } },
+    n: () => setTool('note'), c: () => { if (!$('#crossTool').disabled) setTool('cross'); },
+    i: toggleInvert, r: resetAll, t: toggleTags, f: () => { if (p) { fitView(p); scheduleDraw(); } },
+    0: () => setLayout('auto'), 1: () => setLayout('1'), 2: () => setLayout('2'), 3: () => setLayout('mpr'), 4: () => setLayout('4'),
+    Delete: () => { if (p && p.img) { state.measures.delete(p.img); scheduleDraw(); } },
   };
   const fn = actions[k] || actions[k.toLowerCase()];
   if (fn && !e.ctrlKey && !e.metaKey && !e.altKey) { fn(); e.preventDefault(); }
 });
-
-// Strumento iniziale: "Scorri" sui dispositivi touch, "Finestra" con il mouse
-const isTouchUI = matchMedia('(pointer: coarse)').matches;
-setTool(isTouchUI ? 'scroll' : 'window');
 
 // Trascina e rilascia (anche cartelle intere)
 ['dragenter', 'dragover'].forEach(t => viewport.addEventListener(t, e => { e.preventDefault(); viewport.classList.add('drop'); }));
@@ -1143,7 +1844,7 @@ viewport.addEventListener('drop', async e => {
   loadFiles(out);
 });
 
-new ResizeObserver(() => { if (state.autoFit) fitView(); scheduleDraw(); }).observe(viewport);
+new ResizeObserver(() => { state.panes.forEach(p => { if (p.autoFit) fitView(p); }); scheduleDraw(); }).observe(grid);
 
 let toastTimer = null;
 function setStatus(t, warn) {
@@ -1151,13 +1852,19 @@ function setStatus(t, warn) {
   // Su schermi stretti la barra di stato è nascosta: mostra un avviso temporaneo
   if (warn || matchMedia('(max-width:900px)').matches) {
     const el = $('#toast'); el.textContent = t; el.classList.toggle('warn', !!warn); el.hidden = false;
-    clearTimeout(toastTimer); toastTimer = setTimeout(() => el.hidden = true, warn ? 6000 : 3000);
+    clearTimeout(toastTimer); toastTimer = setTimeout(() => el.hidden = true, warn ? 6000 : 4000);
   }
 }
 
+// Avvio: una vista vuota; strumento "Scorri" sui dispositivi touch, "Finestra" con il mouse
+mountPanes(1, 'l1'); setActive(state.panes[0]);
+setTool(isTouchUI ? 'scroll' : 'window');
+renderNotesList();
+
 // ============================================================
-//  Demo: genera una TC sintetica come veri file DICOM
-//  (Explicit VR Little Endian, 16 bit, Rescale Intercept -1024)
+//  Demo: genera un esame sintetico come veri file DICOM
+//  - TC di 60 fette (Explicit VR Little Endian, 16 bit, Rescale Intercept -1024)
+//  - RX del torace in due proiezioni (PA e laterale) calcolate dallo stesso fantoccio
 // ============================================================
 function makeDemoFiles() {
   const R = 256, C = 256, N = 60, ps = 1.2, th = 3;
@@ -1176,10 +1883,19 @@ function makeDemoFiles() {
     if (long) dv.setUint32(8, data.length, true); else dv.setUint16(6, data.length, true);
     return concat([head, data]);
   }
+  function dicomFile(name, sopClass, sop, body) {
+    const meta = concat([
+      el(2, 1, 'OB', new Uint8Array([0, 1])), el(2, 2, 'UI', sopClass), el(2, 3, 'UI', sop),
+      el(2, 0x10, 'UI', '1.2.840.10008.1.2.1'), el(2, 0x12, 'UI', '2.25.1')]);
+    const pre = new Uint8Array(132); pre.set(enc.encode('DICM'), 128);
+    return new File([concat([pre, el(2, 0, 'UL', [meta.length]), meta, body])], name, { type: 'application/dicom' });
+  }
   const now = new Date(), da = `${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, '0')}${String(now.getDate()).padStart(2, '0')}`;
-  const sopClass = '1.2.840.10008.5.1.4.1.1.2';
-  const studyUID = '2.25.314159265358979323846264338327', seriesUID = '2.25.271828182845904523536028747135', forUID = '2.25.161803398874989484820458683436';
+  const ctClass = '1.2.840.10008.5.1.4.1.1.2', dxClass = '1.2.840.10008.5.1.4.1.1.1.1';
+  const studyUID = '2.25.314159265358979323846264338327', seriesUID = '2.25.271828182845904523536028747135';
+  const dxSeriesUID = '2.25.141421356237309504880168872420', forUID = '2.25.161803398874989484820458683436';
   let seed = 12345; const rnd = () => (seed = (Math.imul(seed, 1664525) + 1013904223) >>> 0) / 4294967296;
+  const front = new Float32Array(N * C), side = new Float32Array(N * R);   // somme per le radiografie
   const files = [];
   for (let k = 0; k < N; k++) {
     const z = (N / 2 - k) * th;
@@ -1200,21 +1916,20 @@ function makeDemoFiles() {
           if ((x - 16) ** 2 + (y - 28) ** 2 < 144) hu = 220;                          // aorta
           const dv = Math.hypot(x, y - 58); if (dv < 19) hu = dv > 15 ? 750 : 260;    // vertebra
           const dc = Math.hypot(x, y - 86); if (dc < 8) hu = 15; else if (dc < 14 && y > 80) hu = 650; // canale e arco
+          if (eb > 0.72 && eb < 0.79 && y < 45 && z > -40 && k % 6 < 2) hu = 700;     // coste
         }
+        if (hu > -1000 && !(y > 118 && y < 126 && eb >= 1)) { const mu = (hu + 1000) / 1000; front[k * C + c] += mu; side[k * R + r] += mu; }
         hu += hu > -1000 ? (rnd() + rnd() - 1) * 18 : (rnd() - 0.5) * 6;
         px[r * C + c] = Math.max(0, Math.round(hu + 1024));
       }
     }
     const sop = `2.25.9000${k + 1}`;
-    const meta = concat([
-      el(2, 1, 'OB', new Uint8Array([0, 1])), el(2, 2, 'UI', sopClass), el(2, 3, 'UI', sop),
-      el(2, 0x10, 'UI', '1.2.840.10008.1.2.1'), el(2, 0x12, 'UI', '2.25.1')]);
     const body = concat([
-      el(8, 8, 'CS', 'ORIGINAL\\PRIMARY\\AXIAL'), el(8, 0x16, 'UI', sopClass), el(8, 0x18, 'UI', sop),
+      el(8, 8, 'CS', 'ORIGINAL\\PRIMARY\\AXIAL'), el(8, 0x16, 'UI', ctClass), el(8, 0x18, 'UI', sop),
       el(8, 0x20, 'DA', da), el(8, 0x60, 'CS', 'CT'), el(8, 0x70, 'LO', 'Generatore demo'),
       el(8, 0x1030, 'LO', 'Studio dimostrativo'), el(8, 0x103e, 'LO', 'Fantoccio torace-addome (sintetico)'),
       el(0x10, 0x10, 'PN', 'ANONIMO^DEMO'), el(0x10, 0x20, 'LO', 'DEMO-0001'),
-      el(0x18, 0x50, 'DS', String(th)),
+      el(0x18, 0x15, 'CS', 'CHEST'), el(0x18, 0x50, 'DS', String(th)),
       el(0x20, 0x0d, 'UI', studyUID), el(0x20, 0x0e, 'UI', seriesUID), el(0x20, 0x11, 'IS', '1'), el(0x20, 0x13, 'IS', String(k + 1)),
       el(0x20, 0x32, 'DS', `${(-C / 2 * ps).toFixed(1)}\\${(-R / 2 * ps).toFixed(1)}\\${z}`),
       el(0x20, 0x37, 'DS', '1\\0\\0\\0\\1\\0'), el(0x20, 0x52, 'UI', forUID), el(0x20, 0x1041, 'DS', String(z)),
@@ -1223,10 +1938,37 @@ function makeDemoFiles() {
       el(0x28, 0x102, 'US', [11]), el(0x28, 0x103, 'US', [0]),
       el(0x28, 0x1050, 'DS', '40'), el(0x28, 0x1051, 'DS', '400'), el(0x28, 0x1052, 'DS', '-1024'), el(0x28, 0x1053, 'DS', '1'),
       el(0x7fe0, 0x10, 'OW', new Uint8Array(px.buffer))]);
-    const pre = new Uint8Array(132); pre.set(enc.encode('DICM'), 128);
-    const bytes = concat([pre, el(2, 0, 'UL', [meta.length]), meta, body]);
-    files.push(new File([bytes], `IMG${String(k + 1).padStart(4, '0')}.dcm`, { type: 'application/dicom' }));
+    files.push(dicomFile(`IMG${String(k + 1).padStart(4, '0')}.dcm`, ctClass, sop, body));
   }
+  // Radiografie: attenuazione sommata lungo il fascio, interpolata tra le fette
+  const H = Math.floor((N - 1) * th / ps) + 1;
+  function projection(sum, W) {
+    const px = new Uint16Array(H * W);
+    for (let y = 0; y < H; y++) {
+      const zf = y * ps / th, k0 = Math.min(N - 2, Math.floor(zf)), t = zf - k0;
+      for (let x = 0; x < W; x++) {
+        const L = (sum[k0 * W + x] * (1 - t) + sum[(k0 + 1) * W + x] * t) * ps * 0.0035;
+        px[y * W + x] = clamp(Math.round(4095 * (1 - Math.exp(-L)) + (rnd() - 0.5) * 24), 0, 4095);
+      }
+    }
+    return px;
+  }
+  [['PA', front, C, 'L\\F'], ['LL', side, R, 'P\\F']].forEach(([view, sum, W, po], i) => {
+    const sop = `2.25.9100${i + 1}`;
+    const body = concat([
+      el(8, 8, 'CS', 'ORIGINAL\\PRIMARY'), el(8, 0x16, 'UI', dxClass), el(8, 0x18, 'UI', sop),
+      el(8, 0x20, 'DA', da), el(8, 0x60, 'CS', 'DX'), el(8, 0x70, 'LO', 'Generatore demo'),
+      el(8, 0x1030, 'LO', 'Studio dimostrativo'), el(8, 0x103e, 'LO', 'RX torace PA e laterale (sintetico)'),
+      el(0x10, 0x10, 'PN', 'ANONIMO^DEMO'), el(0x10, 0x20, 'LO', 'DEMO-0001'),
+      el(0x18, 0x15, 'CS', 'CHEST'), el(0x18, 0x5101, 'CS', view),
+      el(0x20, 0x0d, 'UI', studyUID), el(0x20, 0x0e, 'UI', dxSeriesUID), el(0x20, 0x11, 'IS', '2'), el(0x20, 0x13, 'IS', String(i + 1)),
+      el(0x20, 0x20, 'CS', po),
+      el(0x28, 2, 'US', [1]), el(0x28, 4, 'CS', 'MONOCHROME2'), el(0x28, 0x10, 'US', [H]), el(0x28, 0x11, 'US', [W]),
+      el(0x28, 0x30, 'DS', `${ps}\\${ps}`), el(0x28, 0x100, 'US', [16]), el(0x28, 0x101, 'US', [12]),
+      el(0x28, 0x102, 'US', [11]), el(0x28, 0x103, 'US', [0]),
+      el(0x7fe0, 0x10, 'OW', new Uint8Array(projection(sum, W).buffer))]);
+    files.push(dicomFile(`RX${i + 1}.dcm`, dxClass, sop, body));
+  });
   for (let i = files.length - 1; i > 0; i--) { const j = Math.floor(rnd() * (i + 1)); [files[i], files[j]] = [files[j], files[i]]; } // ordine casuale: la lettura deve riordinarle
   return files;
 }

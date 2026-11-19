@@ -2,7 +2,7 @@
 
 Un visualizzatore di immagini mediche DICOM (TC, RM, RX…) che funziona interamente nel browser.
 
-**Privacy:** i file dell'esame non vengono mai caricati su internet. Il browser li legge e li elabora direttamente sul computer di chi usa la pagina, e nessun server riceve le immagini.
+**Privacy:** i file dell'esame non vengono mai caricati su internet. Il browser li legge e li elabora direttamente sul computer di chi usa la pagina, e nessun server riceve le immagini. Le uniche cose conservate sono le note scritte dall'utente, nel browser del suo dispositivo.
 
 ## Documentazione
 - 📘 [Manuale d'uso (PDF)](documenti/Manuale%20d'uso%20-%20Visualizzatore%20DICOM.pdf): istruzioni complete per computer e smartphone
@@ -26,8 +26,27 @@ Non caricare mai nel repository file di esami reali. Il `.gitignore` esclude gi�
 ## Uso
 - **Apri file**: puoi scegliere uno o più file DICOM oppure un archivio **.zip**. Con **Apri cartella** apri una cartella intera, oppure puoi trascinarla sull'area nera.
   Il programma salta da solo i file che non sono immagini, per esempio il visualizzatore incluso nei CD.
-- **Demo**: genera una TC sintetica di 60 fette per fare prove senza dati reali.
-- Strumenti: Scorri, Finestra (trascina per cambiare livello/larghezza), Sposta, Zoom, Misura (distanza in mm).
+- **Demo**: genera un esame sintetico per fare prove senza dati reali: una TC di 60 fette e una RX del torace in due proiezioni (PA e laterale).
+- Strumenti: Scorri, Finestra (trascina per cambiare livello/larghezza), Sposta, Zoom, Misura (distanza in mm), Nota, Incrocio (MPR).
+
+### Viste multiple e riconoscimento dell'esame
+Con **Vista automatica** il programma legge modalità, parte del corpo, orientamento e proiezione dai tag DICOM e sceglie la disposizione:
+
+| Esame | Vista |
+|---|---|
+| TC o RM volumetrica (fette parallele ed equidistanti) | **MPR**: assiale, coronale e sagittale ricostruite, con linee di riferimento colorate e strumento **Incrocio** per portare i piani su un punto |
+| Radiografie con più proiezioni | proiezioni affiancate: frontale (PA/AP), poi laterale e oblique; mammografia CC dx/sx e MLO dx/sx |
+| RM con serie su piani diversi | griglia con una serie per piano |
+| Altro (ecografie, filmati, immagini singole) | una vista |
+
+Il menu delle viste permette anche di scegliere 1 immagine, 2 affiancate, griglia 2×2 o MPR. Ogni vista ha zoom e finestra propri; quella attiva ha il bordo blu. Ai bordi compaiono le lettere di orientamento (R/L, A/P, H/F).
+
+### Note sulle immagini
+Con lo strumento **Nota** si tocca un punto e si scrive il testo. Le note:
+- compaiono sull'immagine come segnaposto numerato con il testo accanto; si modificano toccandole e si spostano trascinandole;
+- sono elencate nel pannello a sinistra (tocca una nota per andare all'immagine);
+- vengono salvate **nel browser del dispositivo** (`localStorage`), collegate all'identificativo dell'immagine (SOP Instance UID), e si ritrovano riaprendo lo stesso esame. Non vengono mai inviate in rete e non contengono il nome del paziente;
+- si possono esportare e importare come file `.json`, come copia di sicurezza o per spostarle su un altro dispositivo.
 - **▶**: riproduce la serie o il filmato (multi-frame, rispettando il Frame Time).
 - Preset di finestra per la TC (cervello, tessuti molli, addome, polmone, osso), Inverti, Salva PNG.
 - **Tag DICOM**: mostra tutti i tag del file corrente, con un filtro di ricerca.
@@ -62,7 +81,8 @@ Il programma è stato verificato con i file di test di pydicom e di jpeg-lossles
 
 ## Limiti e prossimi passi possibili
 - Non sono supportati il JPEG Extended a 12 bit (`1.2.840.10008.1.2.4.51` a 12 bit) e il Deflate: per questi file compare un messaggio.
-- Mancano le viste MPR (sagittale/coronale), la misura degli angoli e le ROI con media e deviazione standard.
+- L'MPR è a ricostruzione semplice (pixel più vicino), senza MIP, viste oblique o 3D. Sui telefoni, se la memoria non basta, il volume viene ricostruito a risoluzione ridotta.
+- Mancano la misura degli angoli e le ROI con media e deviazione standard.
 
 È uno strumento didattico: non va usato per fare diagnosi.
 
@@ -70,5 +90,9 @@ Il programma è stato verificato con i file di test di pydicom e di jpeg-lossles
 1. `parseFile` / `buildImages`: lettura del file e dei tag principali
 2. `sortSeries`: ordinamento delle fette
 3. `decodeImage` (con `decodeRLE`, `decodeJPEG`, `decodeLossless`, `decodeWasm`) e `renderOffscreen`: decodifica dei pixel e applicazione della finestra (window/level)
-4. `draw`, `updateOverlays`: disegno, overlay e misure
-5. `makeDemoFiles`: crea veri file DICOM sintetici, utile per capire il formato
+4. `planFor`, `projectionView`, `volumeInfo`: riconoscimento del tipo di esame, delle proiezioni e dei volumi
+5. `Pane`, `setLayout`: le viste sullo schermo e la loro disposizione
+6. `buildVolume`, `extractPlane`: volume 3D e ricostruzioni MPR
+7. `drawPane`, `updateOverlays`, `drawRefLines`: disegno, overlay, linee di riferimento e misure
+8. `noteRef`, `drawNotes`, `exportNotes`: note salvate nel browser
+9. `makeDemoFiles`: crea veri file DICOM sintetici (TC e RX), utile per capire il formato
